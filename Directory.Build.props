@@ -1,0 +1,13 @@
+<Project>
+
+    <PropertyGroup>
+        <Langversion>12</Langversion>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>SocketIO.*</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+    </ItemGroup>
+
+</Project>

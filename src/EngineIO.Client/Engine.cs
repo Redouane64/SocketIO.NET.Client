@@ -1,0 +1,1 @@
+namespace EngineIO.Client;public sealed class Engine{    private readonly ITransport _transport;    public Engine(ITransport transport)    {        _transport = transport;    }    public async Task ConnectAsync()    {    }}

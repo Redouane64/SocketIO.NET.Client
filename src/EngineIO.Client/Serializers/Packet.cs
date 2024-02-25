@@ -1,0 +1,1 @@
+namespace EngineIO.Client.Serializers;public class Packet(string type, string? data){    public string Type { get; } = type;    public string? Data { get; } = data;}

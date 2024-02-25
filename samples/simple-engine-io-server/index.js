@@ -9,8 +9,6 @@ const server = engine.attach(httpServer, {
   cors: {
     origin: '*'
   },
-  pingInterval: 3000,
-  pingTimeout: 20000,
 });
 
 httpServer.on('request', (req, res) => {
@@ -22,9 +20,12 @@ server.on('connection', socket => {
     console.log(`[Client] ${data}`);
     socket.send(data);
   });
+  
   socket.on('close', () => { 
     console.log(`[Client] disconnected`);
   });
-
-  socket.send('Hello!!!');
+  
+  setInterval(() => {
+    socket.send("Hello!!!")
+  }, 5000)
 });

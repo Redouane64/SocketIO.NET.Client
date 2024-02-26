@@ -17,7 +17,7 @@ public sealed class HttpPollingTransport : ITransport
     private readonly string _path =
         $"/engine.io?EIO={Protocol}&transport={_transport}";
 
-    private readonly SemaphoreSlim _semaphore = new(2, 2);
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
 
     private bool _handshake;
 

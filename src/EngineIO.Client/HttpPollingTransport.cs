@@ -1,48 +1,49 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using EngineIO.Client.Serializers;
 using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client;
 
 public sealed class HttpPollingTransport : ITransport
 {
-    private const int Protocol = 4;
-    private readonly HttpClient _client;
-
     private readonly ILogger<HttpPollingTransport> _logger;
-    private readonly IPacketSerializer<Packet> _packetSerializer = new DefaulPacketSerializer();
-
+    
+    private const int Protocol = 4;
+    
+    private readonly HttpClient _client;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
-
+    private readonly IPacketParser _packetParser = new DefaultPacketParser();
+    
+    private static readonly string _transport = "polling";
+    
     private bool _handshake;
+    private string _path = $"/engine.io?EIO={Protocol}&transport={_transport}";
 
     public int MaxPayload { get; private set; }
     public int PingInterval { get; private set; }
     public int PingTimeout { get; private set; }
     public string? Sid { get; private set; }
     public string[]? Upgrades { get; private set; }
+    public string Transport => _transport;
 
     public HttpPollingTransport(HttpClient client, ILogger<HttpPollingTransport> logger)
     {
         _client = client;
         _logger = logger;
     }
-
-    private string Path => $"/engine.io?EIO={Protocol}&transport={Transport}";
-
-    public IPacketSerializer<Packet> Serializer => _packetSerializer;
-    public string Transport => "polling";
-
-    public async Task<byte[]> GetAsync(CancellationToken cancellationToken = default)
+    
+    public async Task<IReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)
     {
         if (!_handshake) throw new Exception("Transport is not connected");
 
         try
         {
             await _semaphore.WaitAsync(cancellationToken);
-            var path = string.Join('&', Path, $"sid={Sid}");
-            return await _client.GetByteArrayAsync(path, cancellationToken);
+            
+            var path = string.Join('&', _path, $"sid={Sid}");
+            var data = await _client.GetByteArrayAsync(path, cancellationToken);
+
+            return _packetParser.Parse(data);
         }
         finally
         {
@@ -50,15 +51,17 @@ public sealed class HttpPollingTransport : ITransport
         }
     }
 
-    public async Task SendAsync(byte[] data, CancellationToken cancellationToken = default)
+    public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)
     {
         try
         {
             if (!_handshake) throw new Exception("Transport is not connected");
 
             await _semaphore.WaitAsync(cancellationToken);
+            
+            var content = new ByteArrayContent(packet.Data);
             var response = await _client.PostAsync(
-                string.Join('&', Path, $"sid={Sid}"), new ByteArrayContent(data), cancellationToken);
+                string.Join('&', _path, $"sid={Sid}"), content, cancellationToken);
 
             if (!response.IsSuccessStatusCode) throw new Exception("Unexpected response from remote server");
         }
@@ -72,36 +75,28 @@ public sealed class HttpPollingTransport : ITransport
     {
         if (_handshake) return;
 
-        try
-        {
-            await _semaphore.WaitAsync(cancellationToken);
+        var data = await _client.GetByteArrayAsync(_path, cancellationToken);
 
-            var packet = await _client.GetByteArrayAsync(Path, cancellationToken);
+        if (_packetParser is null) throw new Exception("Packet parser is not set");
 
-            if (_packetSerializer is null) throw new Exception("Packet serializer is not set");
+        var packets = _packetParser.Parse(data);
+        var handshakePacket = packets.First();
+        
+        if (handshakePacket.Type != PacketType.Open) throw new Exception("Unexpected packet type");
 
-            var serializedPacket = _packetSerializer.Deserialize(packet.AsSpan());
+        var handshake = JsonSerializer
+            .Deserialize<HandshakePayload>(handshakePacket.Payload);
 
-            if (serializedPacket.Type != "0") throw new Exception("Unexpected packet type");
+        if (handshake is null) throw new Exception("Invalid handshake packet");
 
-            var handshake = JsonSerializer
-                .Deserialize<HandshakePayload>(serializedPacket.Data!);
-
-            if (handshake is null) throw new Exception("Invalid handshake packet");
-
-            Sid = handshake.Sid;
-            MaxPayload = handshake.MaxPayload;
-            Upgrades = handshake.Upgrades;
-            PingTimeout = handshake.PingTimeout;
-            PingInterval = handshake.PingInterval;
-
-            _handshake = true;
-            _logger.LogDebug("Handshake completed successfully");
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
+        Sid = handshake.Sid;
+        MaxPayload = handshake.MaxPayload;
+        Upgrades = handshake.Upgrades;
+        PingTimeout = handshake.PingTimeout;
+        PingInterval = handshake.PingInterval;
+        
+        _handshake = true;
+        _logger.LogDebug("Handshake completed successfully");
     }
 
     private class HandshakePayload

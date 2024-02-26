@@ -1,1 +1,1 @@
-namespace EngineIO.Client;public interface ITransport{    string Transport { get; }    Task<byte[]> GetAsync(CancellationToken cancellationToken = default);    Task SendAsync(byte[] data, CancellationToken cancellationToken = default);}
+namespace EngineIO.Client;public interface ITransport{    string Transport { get; }    Task<IReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default);    Task SendAsync(Packet packet, CancellationToken cancellationToken = default);    }

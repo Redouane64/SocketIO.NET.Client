@@ -1,1 +1,0 @@
-namespace EngineIO.Client.Serializers;public interface IPacketSerializer<T>{    T Deserialize(ReadOnlySpan<byte> data);    byte[] Serialize(string type, string? data);}

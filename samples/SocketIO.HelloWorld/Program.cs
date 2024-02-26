@@ -12,9 +12,12 @@ internal class Program
         var logger = LoggerFactory.Create(builder => { builder.AddConsole().SetMinimumLevel(LogLevel.Debug); })
             .CreateLogger<Engine>();
 
-        var engine = new Engine("http://127.0.0.1:9854", logger);
-        await engine.ConnectAsync();
+        using (var engine = new Engine("http://127.0.0.1:9854", logger))
+        {
+            await engine.ConnectAsync();
 
-        Console.ReadKey();
+            Console.ReadKey();
+            await engine.DisconnectAsync();
+        }
     }
 }

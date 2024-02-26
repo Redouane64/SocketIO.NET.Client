@@ -1,13 +1,13 @@
-﻿using System.Text.Json;
+﻿using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client;
 
-public sealed class HttpPollingTransport : ITransport
+public sealed class HttpPollingTransport : ITransport, IDisposable
 {
-    private const int Protocol = 4;
-
+    private static readonly int _protocol = 4;
     private static readonly string _transport = "polling";
 
     private readonly HttpClient _client;
@@ -15,11 +15,13 @@ public sealed class HttpPollingTransport : ITransport
     private readonly IPacketParser _packetParser = new DefaultPacketParser();
 
     private readonly string _path =
-        $"/engine.io?EIO={Protocol}&transport={_transport}";
+        $"/engine.io?EIO={_protocol}&transport={_transport}";
 
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
     private bool _handshake;
+    private PeriodicTimer _packetReaderTimer;
+
 
     public HttpPollingTransport(HttpClient client, ILogger logger)
     {
@@ -32,6 +34,14 @@ public sealed class HttpPollingTransport : ITransport
     public int PingTimeout { get; private set; }
     public string? Sid { get; private set; }
     public string[]? Upgrades { get; private set; }
+
+    public void Dispose()
+    {
+        _client.Dispose();
+        _semaphore.Dispose();
+        _packetReaderTimer.Dispose();
+    }
+
     public string Transport => _transport;
 
     public async Task<IReadOnlyCollection<Packet>> GetAsync(
@@ -70,6 +80,20 @@ public sealed class HttpPollingTransport : ITransport
         finally
         {
             _semaphore.Release();
+        }
+    }
+
+    public async IAsyncEnumerable<Packet> Poll([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var interval = Math.Abs(PingInterval - PingTimeout);
+        _packetReaderTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(
+            interval));
+
+        while (!cancellationToken.IsCancellationRequested &&
+               await _packetReaderTimer.WaitForNextTickAsync(cancellationToken))
+        {
+            var packets = await GetAsync(cancellationToken);
+            foreach (var packet in packets) yield return packet;
         }
     }
 

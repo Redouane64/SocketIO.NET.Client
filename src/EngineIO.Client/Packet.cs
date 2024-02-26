@@ -19,6 +19,11 @@ public struct Packet
     {
         return new Packet([(byte)PacketType.Pong]);
     }
+    
+    public static Packet ClosePacket()
+    {
+        return new Packet([(byte)PacketType.Close]);
+    }
 
     private string? _text;
 

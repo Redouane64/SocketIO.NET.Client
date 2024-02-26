@@ -12,17 +12,14 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     private readonly HttpClient _client;
     private readonly ILogger _logger;
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly IPacketParser _packetParser = new DefaultPacketParser();
 
     private readonly string _path =
         $"/engine.io?EIO={_protocol}&transport={_transport}";
-
-    private readonly SemaphoreSlim _semaphore = new(1, 1);
-
+    
     private bool _handshake;
-    private PeriodicTimer _packetReaderTimer;
-
-
+    
     public HttpPollingTransport(HttpClient client, ILogger logger)
     {
         _client = client;
@@ -39,7 +36,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     {
         _client.Dispose();
         _semaphore.Dispose();
-        _packetReaderTimer.Dispose();
     }
 
     public string Transport => _transport;
@@ -86,11 +82,11 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async IAsyncEnumerable<Packet> Poll([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var interval = Math.Abs(PingInterval - PingTimeout);
-        _packetReaderTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(
+        using var packetReaderTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(
             interval));
-
+        
         while (!cancellationToken.IsCancellationRequested &&
-               await _packetReaderTimer.WaitForNextTickAsync(cancellationToken))
+               await packetReaderTimer.WaitForNextTickAsync(cancellationToken))
         {
             var packets = await GetAsync(cancellationToken);
             foreach (var packet in packets) yield return packet;

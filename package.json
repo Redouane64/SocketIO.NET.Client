@@ -1,0 +1,14 @@
+{
+  "name": "socket-io-dotnet-client-samples",
+  "version": "1.0.0",
+  "description": "Socket.IO .NET client samples test server and tools",
+  "directories": {},
+  "scripts": {
+    "start:server": "npm start -w samples/simple-engine-io-server"
+  },
+  "author": "Redhouane Sobaihi",
+  "license": "ISC",
+  "workspaces": [
+    "samples/simple-engine-io-server"
+  ]
+}

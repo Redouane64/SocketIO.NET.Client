@@ -39,7 +39,7 @@ public struct Packet
         return _closePacket;
     }
 
-    private string _text;
+    private string? _text;
 
     /// <summary>
     ///     Decode packet payload using Encoding.UTF8.

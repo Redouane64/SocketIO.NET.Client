@@ -1,1 +1,1 @@
-namespace EngineIO.Client;public interface IPacketParser{    IReadOnlyCollection<Packet> Parse(byte[] binary);    }
+namespace EngineIO.Client;public interface IPacketParser{    IReadOnlyCollection<Packet> Parse(byte[] binary);}

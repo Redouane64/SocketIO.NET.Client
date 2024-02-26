@@ -23,7 +23,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\src\EngineIO.Client\EngineIO.Client.csproj" />
+        <ProjectReference Include="..\..\src\EngineIO.Client\EngineIO.Client.csproj"/>
     </ItemGroup>
 
 </Project>

@@ -27,5 +27,5 @@ server.on('connection', socket => {
   
   setInterval(() => {
     socket.send("Hello!!!")
-  }, 5000)
+  }, 10000)
 });

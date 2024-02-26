@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,49 +15,57 @@ internal class Program
         var logger = LoggerFactory.Create(builder => { builder.AddConsole().SetMinimumLevel(LogLevel.Debug); })
             .CreateLogger<HttpPollingTransport>();
 
-        var http = new HttpClient(new SocketsHttpHandler
-        {
-            ConnectTimeout = Timeout.InfiniteTimeSpan
-        });
+        var http = new HttpClient();
         http.BaseAddress = new Uri("http://127.0.0.1:9854");
 
         var transport = new HttpPollingTransport(http, logger);
         await transport.Handshake();
 
-        var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(transport.PingInterval));
+        await ListenToPackets(transport);
+
+        Console.ReadKey();
+    }
+
+    private static async Task ListenToPackets(HttpPollingTransport transport)
+    {
+        var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Min(transport.PingTimeout, transport.PingInterval)));
 
         while (await timer.WaitForNextTickAsync())
         {
-            var binary = await transport.GetAsync();
-            var packet = transport.Serializer.Deserialize(binary);
-
-            switch (packet.Type)
+            var packets = await transport.GetAsync();
+            
+            foreach (var packet in packets)
             {
-                case "1":
-                    Console.WriteLine("Connection closed by remote server");
+                switch (packet.Type)
+                {
+                    case PacketType.Close:
+                        Console.WriteLine($"[{DateTime.Now}] Connection closed by remote server");
+                        
+                        break;
                     
-                    break;
-                
-                case "2":
-                    Console.WriteLine("Heartbeat <");
-                    var pong = transport.Serializer.Serialize("3", null);
-                    await transport.SendAsync(pong);
-                    Console.WriteLine("Heartbeat >");
+                    case PacketType.Ping:
+                        Console.WriteLine($"[{DateTime.Now}] Heartbeat <");
+                        await transport.SendAsync(Packet.Pong());
+                        Console.WriteLine($"[{DateTime.Now}] Heartbeat >");
+                        
+                        break;
                     
-                    break;
-                
-                default:
-                    Console.WriteLine($"Unhandled packet type: {packet.Type}");
-                    if (packet.Data is not null)
-                    {
-                        Console.WriteLine($"Data: {packet.Data}");
-                    }
+                    case PacketType.Message:
+                        Console.WriteLine($"[{DateTime.Now}] Server: {packet}");
+                        
+                        break;
+                    
+                    default:
+                        Console.WriteLine($"[{DateTime.Now}] Unhandled packet type: {packet.Type}");
+                        if (packet.Payload.Any())
+                        {
+                            Console.WriteLine($"Data: {packet}");
+                        }
 
-                    break;
+                        break;
+                }
             }
+
         }
-
-
-        Console.ReadKey();
     }
 }

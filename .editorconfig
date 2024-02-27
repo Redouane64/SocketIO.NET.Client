@@ -7,16 +7,13 @@ indent_style = space
 # C# files
 [*.cs]
 
-#### Core EditorConfig Options ####
-max_line_length = 120
-
-# Indentation and spacing
 indent_size = 4
 tab_width = 4
-
-# New line preferences
+max_line_length = 120
 end_of_line = crlf
-insert_final_newline = false
+insert_final_newline = true
+
+csharp_prefer_braces = true:error
 
 [*.js]
 indent_size = 2

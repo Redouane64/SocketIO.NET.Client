@@ -1,73 +1,71 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EngineIO.Client;
 
 public sealed class Engine : IDisposable
 {
-    private readonly HttpClient _httpClient;
     private readonly ILogger<Engine> _logger;
-    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
     private readonly HttpPollingTransport _transport;
+    private readonly HttpClient _httpClient;
+    
+    private readonly CancellationTokenSource _pollingCts = new();
 
     private bool _connected;
 
-    public Engine(string uri, ILogger<Engine>? logger = null)
+    public Engine(string uri, ILogger<Engine> logger)
     {
-        // TODO: maybe accept HttpClient to be used.
+        _logger = logger;
         _httpClient = new HttpClient();
         _httpClient.BaseAddress = new Uri(uri);
-
-        _logger = logger ??= NullLogger<Engine>.Instance;
-
-        _transport = new HttpPollingTransport(_httpClient,
-            logger);
+        _transport = new HttpPollingTransport(_httpClient);
     }
 
     public void Dispose()
     {
-        _pollingCancellationTokenSource.Dispose();
+        _pollingCts.Dispose();
         _transport.Dispose();
     }
 
     public async Task ConnectAsync()
     {
-        await _transport.Handshake(_pollingCancellationTokenSource.Token);
+        await _transport.Handshake(_pollingCts.Token);
         _connected = true;
 #pragma warning disable CS4014
-        Task.Run(StartPolling, _pollingCancellationTokenSource.Token);
+        Task.Run(StartPolling, _pollingCts.Token).ConfigureAwait(false);
 #pragma warning restore CS4014
         _logger.LogDebug("Client connected");
     }
 
     private async Task StartPolling()
     {
-        await foreach (var packet in _transport.Poll(_pollingCancellationTokenSource.Token))
+        await foreach (var packet in _transport.Poll(_pollingCts.Token))
         {
-            if (packet.Type == PacketType.Ping)
+            if (packet[0] == (byte)PacketType.Ping)
             {
+                _logger.LogDebug($"Heartbeat received");
                 Heartbeat();
                 continue;
             }
 
-            if (packet.Type == PacketType.Close)
+            if (packet[0] == (byte)PacketType.Close)
             {
-                Console.WriteLine($"[{DateTime.Now}] Client dropped by remote server");
-                await _pollingCancellationTokenSource.CancelAsync();
+                _logger.LogDebug("Client dropped by remote server");
+                await _pollingCts.CancelAsync();
                 _connected = false;
                 break;
             }
 
             // TODO: process non heartbeat packets
-            Console.WriteLine($"[{DateTime.Now}] Non-heartbeat packet skipped");
+            _logger.LogDebug("Non-heartbeat packet skipped");
         }
     }
 
     private void Heartbeat()
     {
 #pragma warning disable CS4014
-        _transport.SendAsync(Packet.PongPacket(), _pollingCancellationTokenSource.Token)
-            .ContinueWith((_, _) => { Console.WriteLine($"[{DateTime.Now}] Heartbeat"); }, null,
+        _transport.SendAsync(new[] { (byte)PacketType.Pong }, _pollingCts.Token)
+            .ContinueWith((_, _) => { _logger.LogDebug($"Heartbeat sent"); }, null,
                 TaskContinuationOptions.OnlyOnRanToCompletion)
             .ConfigureAwait(false);
 #pragma warning restore CS4014
@@ -77,8 +75,8 @@ public sealed class Engine : IDisposable
     {
         if (!_connected) return;
 
-        await _transport.SendAsync(Packet.ClosePacket());
-        await _pollingCancellationTokenSource.CancelAsync();
+        await _transport.SendAsync(new[] { (byte)PacketType.Close });
+        await _pollingCts.CancelAsync();
         _connected = false;
     }
 }

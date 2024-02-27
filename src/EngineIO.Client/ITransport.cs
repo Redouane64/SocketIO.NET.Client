@@ -6,11 +6,11 @@ public interface ITransport
 
     Task Handshake(CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyCollection<Packet>> GetAsync(
+    Task<IReadOnlyCollection<byte[]>> GetAsync(
         CancellationToken cancellationToken = default);
 
-    Task SendAsync(Packet packet,
+    Task SendAsync(byte[] packet,
         CancellationToken cancellationToken = default);
 
-    IAsyncEnumerable<Packet> Poll(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<byte[]> Poll(CancellationToken cancellationToken = default);
 }

@@ -1,7 +1,8 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client;
 
@@ -11,54 +12,72 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private static readonly string _transport = "polling";
 
     private readonly HttpClient _client;
-    private readonly ILogger _logger;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
-    private readonly IPacketParser _packetParser = new DefaultPacketParser();
 
-    private readonly string _path =
-        $"/engine.io?EIO={_protocol}&transport={_transport}";
-    
-    private bool _handshake;
-    
-    public HttpPollingTransport(HttpClient client, ILogger logger)
+    public HttpPollingTransport(HttpClient client)
     {
         _client = client;
-        _logger = logger;
     }
 
+    
+    private bool _handshake;
+    private string _path = $"/engine.io?EIO={_protocol}&transport={_transport}";
+
+    internal string Path
+    {
+        get
+        {
+            if (!_handshake) return _path;
+            _path = $"/engine.io?EIO={_protocol}&transport={_transport}&sid={Sid}";
+            return _path;
+        }
+    }
     public int MaxPayload { get; private set; }
     public int PingInterval { get; private set; }
     public int PingTimeout { get; private set; }
     public string? Sid { get; private set; }
     public string[]? Upgrades { get; private set; }
-
-    public void Dispose()
-    {
-        _client.Dispose();
-        _semaphore.Dispose();
-    }
-
     public string Transport => _transport;
 
-    public async Task<IReadOnlyCollection<Packet>> GetAsync(
+    public async Task<IReadOnlyCollection<byte[]>> GetAsync(
         CancellationToken cancellationToken = default)
     {
         if (!_handshake) throw new Exception("Transport is not connected");
+        var packets = new Collection<byte[]>();
+        
         try
         {
             await _semaphore.WaitAsync(cancellationToken);
+            var data = await _client.GetByteArrayAsync(Path, cancellationToken);
+            var separator = 0x1E;
+            var start = 0;
+            for (var index = start; index < data.Length; index++)
+            {
+                if (data[index] == separator)
+                {
+                    var startIdx = new Index(start);
+                    var endIdx = new Index(index - start);
+                    var packet = data[startIdx..endIdx];
+                    packets.Add(packet);
+                    start = index + 1;
+                }
+            }
 
-            var path = string.Join('&', _path, $"sid={Sid}");
-            var data = await _client.GetByteArrayAsync(path, cancellationToken);
-            return _packetParser.Parse(data);
+            if (start < data.Length)
+            {
+                var packet = data.AsSpan(start).ToArray();
+                packets.Add(packet);
+            }
         }
         finally
         {
             _semaphore.Release();
         }
+
+        return packets;
     }
 
-    public async Task SendAsync(Packet packet,
+    public async Task SendAsync(byte[] packet,
         CancellationToken cancellationToken = default)
     {
         try
@@ -66,9 +85,8 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             if (!_handshake) throw new Exception("Transport is not connected");
             await _semaphore.WaitAsync(cancellationToken);
 
-            var content = new ByteArrayContent(packet.Data);
-            var response = await _client.PostAsync(
-                string.Join('&', _path, $"sid={Sid}"), content,
+            using var content = new ByteArrayContent(packet);
+            using var response = await _client.PostAsync(Path, content,
                 cancellationToken);
             if (!response.IsSuccessStatusCode)
                 throw new Exception("Unexpected response from remote server");
@@ -79,9 +97,9 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
     }
 
-    public async IAsyncEnumerable<Packet> Poll([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<byte[]> Poll([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var interval = Math.Abs(PingInterval - PingTimeout);
+        var interval = PingInterval;
         using var packetReaderTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(
             interval));
         
@@ -96,16 +114,13 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async Task Handshake(CancellationToken cancellationToken = default)
     {
         if (_handshake) return;
-        var data = await _client.GetByteArrayAsync(_path, cancellationToken);
-        if (_packetParser is null)
-            throw new Exception("Packet parser is not set");
-        var packets = _packetParser.Parse(data);
-        var handshakePacket = packets.First();
+        var data = await _client.GetByteArrayAsync(Path, cancellationToken);
+        var handshakePacket = (PacketType)data[0];
 
-        if (handshakePacket.Type != PacketType.Open)
+        if (handshakePacket != PacketType.Open)
             throw new Exception("Unexpected packet type");
         var handshake = JsonSerializer
-            .Deserialize<HandshakePayload>(handshakePacket.Payload);
+            .Deserialize<HandshakePayload>(data.AsSpan()[1..]);
         if (handshake is null) throw new Exception("Invalid handshake packet");
         Sid = handshake.Sid;
         MaxPayload = handshake.MaxPayload;
@@ -114,19 +129,30 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         PingInterval = handshake.PingInterval;
 
         _handshake = true;
-        _logger.LogDebug("Handshake completed successfully");
+        Debug.WriteLine("Handshake completed successfully");
     }
-
+    
+    public void Dispose()
+    {
+        _client.Dispose();
+        _semaphore.Dispose();
+    }
+    
     private class HandshakePayload
     {
-        [JsonPropertyName("sid")] public required string Sid { get; set; }
+        [JsonPropertyName("sid")]
+        public required string Sid { get; set; }
 
-        [JsonPropertyName("upgrades")] public required string[] Upgrades { get; set; }
+        [JsonPropertyName("upgrades")] 
+        public required string[] Upgrades { get; set; }
 
-        [JsonPropertyName("pingInterval")] public required int PingInterval { get; set; }
+        [JsonPropertyName("pingInterval")] 
+        public required int PingInterval { get; set; }
 
-        [JsonPropertyName("pingTimeout")] public required int PingTimeout { get; set; }
+        [JsonPropertyName("pingTimeout")] 
+        public required int PingTimeout { get; set; }
 
-        [JsonPropertyName("maxPayload")] public required int MaxPayload { get; set; }
+        [JsonPropertyName("maxPayload")] 
+        public required int MaxPayload { get; set; }
     }
 }

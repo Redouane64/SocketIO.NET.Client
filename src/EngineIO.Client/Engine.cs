@@ -38,7 +38,7 @@ public sealed class Engine : IDisposable
 
     private async Task StartPolling()
     {
-        await foreach (var packet in _transport.Poll(_pollingCts.Token))
+        await foreach (var packet in _transport.PollAsync(_pollingCts.Token).ConfigureAwait(false))
         {
             if (packet[0] == (byte)PacketType.Ping)
             {
@@ -50,7 +50,7 @@ public sealed class Engine : IDisposable
             if (packet[0] == (byte)PacketType.Close)
             {
                 _logger.LogDebug("Client dropped by remote server");
-                await _pollingCts.CancelAsync();
+                await _pollingCts.CancelAsync().ConfigureAwait(false);
                 _connected = false;
                 break;
             }
@@ -60,7 +60,7 @@ public sealed class Engine : IDisposable
         }
 
         _logger.LogDebug("Server connection timeout");
-        await _pollingCts.CancelAsync();
+        await _pollingCts.CancelAsync().ConfigureAwait(false);
     }
 
     private void Heartbeat()

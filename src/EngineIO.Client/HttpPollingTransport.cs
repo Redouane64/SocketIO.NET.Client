@@ -16,7 +16,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly ILogger<HttpPollingTransport> _logger;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
-
     private bool _handshake;
     private string _path = $"/engine.io?EIO={_protocol}&transport={_transport}";
 
@@ -46,24 +45,26 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             return _path;
         }
     }
-    
-    private async Task<byte[]> _GetPackets(CancellationToken cancellationToken)
-    {
-        var data = Array.Empty<byte>();
-        try
-        {
-            await _semaphore.WaitAsync(cancellationToken);
-            data = await _client.GetByteArrayAsync(Path, cancellationToken);
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
 
-        return data;
+    public async IAsyncEnumerable<byte[]> PollAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var interval = Math.Abs(PingInterval - PingTimeout);
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(
+            interval));
+
+        while (!cancellationToken.IsCancellationRequested &&
+               await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            var packets = await GetPackets(cancellationToken);
+            foreach (var packet in packets)
+            {
+                yield return packet;
+            }
+        }
     }
 
-    public async Task<IReadOnlyCollection<byte[]>> GetAsync(
+    public async Task<IReadOnlyCollection<byte[]>> GetPackets(
         CancellationToken cancellationToken = default)
     {
         if (!_handshake)
@@ -71,7 +72,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             throw new Exception("Transport is not connected");
         }
 
-        var data = await _GetPackets(cancellationToken);
+        var data = await GetAsync(cancellationToken);
         
         var packets = new Collection<byte[]>();
         var separator = 0x1E;
@@ -95,7 +96,23 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
         return packets;
     }
+        
+    public async Task<byte[]> GetAsync(CancellationToken cancellationToken)
+    {
+        var data = Array.Empty<byte>();
+        try
+        {
+            await _semaphore.WaitAsync(cancellationToken);
+            data = await _client.GetByteArrayAsync(Path, cancellationToken);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
 
+        return data;
+    }
+    
     public async Task SendAsync(byte[] packet,
         CancellationToken cancellationToken = default)
     {
@@ -125,24 +142,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             _semaphore.Release();
         }
     }
-
-    public async IAsyncEnumerable<byte[]> Poll([EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var interval = PingInterval;
-        using var pollTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(
-            interval));
-        
-        while (!cancellationToken.IsCancellationRequested &&
-               await pollTimer.WaitForNextTickAsync(cancellationToken))
-        {
-            var packets = await GetAsync(cancellationToken);
-            foreach (var packet in packets)
-            {
-                yield return packet;
-            }
-        }
-    }
-
+    
     public async Task Handshake(CancellationToken cancellationToken = default)
     {
         if (_handshake)
@@ -150,7 +150,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             return;
         }
 
-        var data = await _GetPackets(cancellationToken);
+        var data = await GetAsync(cancellationToken);
         var handshakePacket = (PacketType)data[0];
 
         if (handshakePacket != PacketType.Open)

@@ -31,7 +31,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public string? Sid { get; private set; }
     public string[]? Upgrades { get; private set; }
     public string Transport => _transport;
-    
+
     internal string Path
     {
         get
@@ -73,7 +73,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
 
         var data = await GetAsync(cancellationToken);
-        
+
         var packets = new Collection<byte[]>();
         var separator = 0x1E;
 
@@ -96,7 +96,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
         return packets;
     }
-        
+
     public async Task<byte[]> GetAsync(CancellationToken cancellationToken)
     {
         var data = Array.Empty<byte>();
@@ -112,7 +112,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
         return data;
     }
-    
+
     public async Task SendAsync(byte[] packet,
         CancellationToken cancellationToken = default)
     {
@@ -142,7 +142,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             _semaphore.Release();
         }
     }
-    
+
     public async Task Handshake(CancellationToken cancellationToken = default)
     {
         if (_handshake)
@@ -175,7 +175,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         Debug.WriteLine("Handshake completed successfully");
 
     }
-    
+
     public void Dispose()
     {
         _client.Dispose();

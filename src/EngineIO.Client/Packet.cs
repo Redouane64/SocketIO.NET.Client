@@ -1,7 +1,7 @@
 namespace EngineIO.Client;
 
 /// <summary>
-///     Represent EIO protocol packet types. see: https://socket.io/docs/v4/engine-io-protocol/#protocol
+/// Represent EIO protocol packet types. see: https://socket.io/docs/v4/engine-io-protocol/#protocol
 /// </summary>
 public enum PacketType : byte
 {

@@ -4,7 +4,7 @@
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <TargetFramework>net8.0</TargetFramework>
-        <RootNamespace>SocketIO.Client.HelloWorld</RootNamespace>
+        <RootNamespace>PingPong</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

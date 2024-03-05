@@ -9,13 +9,26 @@ const server = engine.attach(httpServer, {
   cors: {
     origin: '*'
   },
+  pingInterval: 10000,
+  pingTimeout: 20000,
+  transports: ['polling', "websocket"],
+  allowUpgrades: true,
 });
 
 httpServer.on('request', (req, res) => {
   server.handleRequest(req, res);
 });
 
+server.on('connection_error', (error) => {
+  process.stderr.write(`Error:\n${JSON.stringify(error)}\n\n`)
+})
+
+httpServer.on('upgrade', (req, socket, head) => {
+  server.handleUpgrade(req, socket, head);
+})
+
 server.on('connection', socket => {
+  console.log('[Client] connected')
   socket.on('message', data => { 
     console.log(`[Client] ${data}`);
     socket.send(data);
@@ -25,7 +38,13 @@ server.on('connection', socket => {
     console.log(`[Client] disconnected`);
   });
   
+  /*
   setInterval(() => {
-    socket.send("Hello!!!")
+    socket.send("Hello!!!");
   }, 10000)
+
+  setTimeout(() => {
+    socket.close();
+  }, 15000)
+  */
 });

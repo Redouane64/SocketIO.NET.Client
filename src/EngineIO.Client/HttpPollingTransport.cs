@@ -17,6 +17,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
     private bool _handshake;
+    private bool _paused;
     private string _path = $"/engine.io?EIO={_protocol}&transport={_transport}";
 
     public HttpPollingTransport(HttpClient client, ILogger<HttpPollingTransport> logger)
@@ -116,9 +117,20 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async Task SendAsync(byte[] packet,
         CancellationToken cancellationToken = default)
     {
+        if (_paused)
+        {
+            _logger.LogWarning("Attempt to send data while transport is in paused state");
+            return;
+        }
+        
         if (!_handshake)
         {
             throw new Exception("Transport is not connected");
+        }
+
+        if (packet.Length > MaxPayload)
+        {
+            throw new Exception("Max packet payload exceeded");
         }
 
         try
@@ -174,6 +186,11 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _handshake = true;
         Debug.WriteLine("Handshake completed successfully");
 
+    }
+
+    public void Pause()
+    {
+        _paused = true;
     }
 
     public void Dispose()

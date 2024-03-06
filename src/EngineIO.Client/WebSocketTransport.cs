@@ -1,54 +1,65 @@
 using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client;
 
 public class WebSocketTransport : ITransport, IDisposable
 {
-    private readonly ILogger<WebSocketTransport> _logger;
     private readonly ClientWebSocket _client;
+    private readonly HandshakePacket _handshakePacket;
+    private readonly ILogger<WebSocketTransport> _logger;
 
     private readonly int _protocol = 4;
-    private readonly string _transport = "websocket";
-    
-    private Uri _uri;
-    private bool _handshake;
+    private readonly SemaphoreSlim _receiveSemaphore = new(1, 1);
 
-    public WebSocketTransport(string baseAddress, string? sid, ILogger<WebSocketTransport> logger)
+    private readonly SemaphoreSlim _sendSemaphore = new(1, 1);
+
+    private readonly Uri _uri;
+    private bool _handshakeCompleted;
+
+    public WebSocketTransport(string baseAddress, HandshakePacket handshakePacket, ILogger<WebSocketTransport> logger)
     {
         if (baseAddress.StartsWith(Uri.UriSchemeHttp))
         {
             baseAddress = baseAddress.Replace("http://", "ws://");
         }
-        
+
         if (baseAddress.StartsWith(Uri.UriSchemeHttps))
         {
             baseAddress = baseAddress.Replace("https://", "wss://");
         }
 
-        var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={_transport}";
-        
-        if (sid is not null)
+        var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}";
+
+        if (handshakePacket.Sid is not null)
         {
-            uri += $"&sid={sid}";
+            uri += $"&sid={handshakePacket.Sid}";
         }
-        
+
+        _handshakePacket = handshakePacket;
+
         _uri = new Uri(uri);
         _logger = logger;
         _client = new ClientWebSocket();
     }
 
-    public string Transport => _transport;
-    
+    public void Dispose()
+    {
+        _client.Dispose();
+    }
+
+    public string Name { get; } = "websocket";
+
     public async Task Handshake(CancellationToken cancellationToken = default)
     {
-        if (_handshake)
+        if (_handshakeCompleted)
         {
             return;
         }
 
         await _client.ConnectAsync(_uri, cancellationToken);
-      
+
         // ping probe
         var pingProbePacket = new[]
             { (byte)PacketType.Ping, (byte)'p', (byte)'r', (byte)'o', (byte)'b', (byte)'e' };
@@ -58,7 +69,7 @@ public class WebSocketTransport : ITransport, IDisposable
             false,
             cancellationToken);
         _logger.LogDebug("Probe sent");
-        
+
         // pong probe
         var pongProbePacket = new byte[6];
         await _client.ReceiveAsync(new Memory<byte>(pongProbePacket), cancellationToken);
@@ -79,17 +90,42 @@ public class WebSocketTransport : ITransport, IDisposable
             cancellationToken);
 
         _logger.LogDebug("Upgrade completed");
-        _handshake = true;
+        _handshakeCompleted = true;
     }
 
-    public Task Heartbeat(CancellationToken cancellationToken = default)
+    public async Task<byte[]> GetAsync(CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
-    }
+        var buffer = new byte[64];
+        var receivedCount = 0;
 
-    public Task<byte[]> GetAsync(CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
+        try
+        {
+            await _receiveSemaphore.WaitAsync(CancellationToken.None);
+            ;
+            WebSocketReceiveResult receiveResult;
+            do
+            {
+                receiveResult = await _client.ReceiveAsync(buffer, cancellationToken);
+
+                if (receiveResult.MessageType == WebSocketMessageType.Close)
+                {
+                    await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                    return null;
+                }
+
+                if (receiveResult.Count > receivedCount - buffer.Length)
+                {
+                    Array.Resize(ref buffer, buffer.Length + receivedCount);
+                }
+
+            } while (receiveResult.EndOfMessage);
+        }
+        finally
+        {
+            _receiveSemaphore.Release();
+        }
+
+        return buffer;
     }
 
     public Task SendAsync(byte[] packet, CancellationToken cancellationToken = default)
@@ -97,13 +133,18 @@ public class WebSocketTransport : ITransport, IDisposable
         throw new NotImplementedException();
     }
 
-    public IAsyncEnumerable<byte[]> PollAsync(CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<byte[]> PollAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var packet = await GetAsync(cancellationToken);
+            yield return packet;
+        }
     }
 
-    public void Dispose()
+    public Task Heartbeat(CancellationToken cancellationToken = default)
     {
-        _client.Dispose();
+        return Task.CompletedTask;
     }
 }

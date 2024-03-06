@@ -6,19 +6,20 @@ namespace EngineIO.Client;
 
 public sealed class Engine : IDisposable
 {
-    private readonly ILoggerFactory _loggerFactory;
+    private readonly bool _autoUpgrade = false;
     private readonly ILogger<Engine> _logger;
-    private readonly CancellationTokenSource _pollingCts = new();
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
 
-    private readonly string _uri;
-    private HttpPollingTransport _httpTransport;
-    private WebSocketTransport _wsTransport;
-    
-    // Client state variables
-    private bool _connected;
-    
     // storage for streamable messages
     private readonly ConcurrentQueue<byte[]> _streamablePackets = new();
+
+    private readonly string _uri;
+
+    // Client state variables
+    private bool _connected;
+    private HttpPollingTransport _httpTransport;
+    private WebSocketTransport _wsTransport;
 
 #pragma warning disable CS8618
     public Engine(string uri, ILoggerFactory loggerFactory)
@@ -31,7 +32,7 @@ public sealed class Engine : IDisposable
 
     public void Dispose()
     {
-        _pollingCts.Dispose();
+        _pollingCancellationTokenSource.Dispose();
         _httpTransport?.Dispose();
         _wsTransport?.Dispose();
     }
@@ -39,22 +40,34 @@ public sealed class Engine : IDisposable
     public async Task ConnectAsync()
     {
         _httpTransport = new HttpPollingTransport(_uri, _loggerFactory.CreateLogger<HttpPollingTransport>());
-        await _httpTransport.Handshake(_pollingCts.Token);
-        
-        if (_httpTransport.Upgrades!.Contains(_wsTransport.Transport))
+        await _httpTransport.Handshake(_pollingCancellationTokenSource.Token);
+
+        if (_autoUpgrade && _httpTransport.HandshakePacket.Upgrades.Contains(_wsTransport.Name))
         {
             _logger.LogDebug("Upgrading to Websocket transport");
             await Upgrade();
         }
-        
+
         _connected = true;
 #pragma warning disable CS4014
-        Task.Run(StartPolling, _pollingCts.Token).ConfigureAwait(false);
+        Task.Run(StartPolling, _pollingCancellationTokenSource.Token).ConfigureAwait(false);
 #pragma warning restore CS4014
         _logger.LogDebug("Client connected");
     }
-    
-    public async IAsyncEnumerable<byte[]> Stream(TimeSpan interval, 
+
+    public async Task DisconnectAsync()
+    {
+        if (!_connected)
+        {
+            return;
+        }
+
+        await _httpTransport.SendAsync(new[] { (byte)PacketType.Close });
+        await _pollingCancellationTokenSource.CancelAsync();
+        _connected = false;
+    }
+
+    public async IAsyncEnumerable<byte[]> Stream(TimeSpan interval,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         using var timer = new PeriodicTimer(interval);
@@ -68,35 +81,15 @@ public sealed class Engine : IDisposable
         }
     }
 
-    public async Task DisconnectAsync()
-    {
-        if (!_connected)
-        {
-            return;
-        }
-
-        await _httpTransport.SendAsync(new[] { (byte)PacketType.Close });
-        await _pollingCts.CancelAsync();
-        _connected = false;
-    }
-
     private async Task StartPolling()
     {
-        await foreach (var packet in _httpTransport.PollAsync(_pollingCts.Token).ConfigureAwait(false))
+        await foreach (var packet in _httpTransport.PollAsync(_pollingCancellationTokenSource.Token)
+                           .ConfigureAwait(false))
         {
-            if (packet[0] == (byte)PacketType.Ping)
-            {
-                _logger.LogDebug("Heartbeat received");
-#pragma warning disable CS4014
-                _httpTransport.Heartbeat(_pollingCts.Token).ConfigureAwait(false);
-#pragma warning restore CS4014
-                continue;
-            }
-
             if (packet[0] == (byte)PacketType.Close)
             {
                 _logger.LogDebug("Client dropped by remote server");
-                await _pollingCts.CancelAsync().ConfigureAwait(false);
+                await _pollingCancellationTokenSource.CancelAsync().ConfigureAwait(false);
                 _connected = false;
                 break;
             }
@@ -112,15 +105,17 @@ public sealed class Engine : IDisposable
     private async Task Upgrade()
     {
         // TODO: complete any remaining packets from polling transport
-        
-        await _pollingCts.CancelAsync();
 
-        _wsTransport = new WebSocketTransport(_uri, _httpTransport.Sid, _loggerFactory.CreateLogger<WebSocketTransport>());
+        await _pollingCancellationTokenSource.CancelAsync();
+
+        _wsTransport =
+            new WebSocketTransport(_uri, _httpTransport.HandshakePacket,
+                _loggerFactory.CreateLogger<WebSocketTransport>());
         await _wsTransport.Handshake();
 
-        _pollingCts.TryReset();
+        _pollingCancellationTokenSource.TryReset();
 #pragma warning disable CS4014
-        Task.Run(StartPolling, _pollingCts.Token).ConfigureAwait(false);
+        Task.Run(StartPolling, _pollingCancellationTokenSource.Token).ConfigureAwait(false);
 #pragma warning restore CS4014
     }
 }

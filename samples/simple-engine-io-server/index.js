@@ -19,23 +19,20 @@ httpServer.on('request', (req, res) => {
   server.handleRequest(req, res);
 });
 
-server.on('connection_error', (error) => {
-  process.stderr.write(`Error:\n${JSON.stringify(error)}\n\n`)
-})
-
 httpServer.on('upgrade', (req, socket, head) => {
   server.handleUpgrade(req, socket, head);
 })
 
 server.on('connection', socket => {
   console.log('[Client] connected')
-  socket.on('message', data => { 
-    console.log(`[Client] ${data}`);
-    socket.send(data);
-  });
   
   socket.on('close', () => { 
     console.log(`[Client] disconnected`);
+  });
+  
+  socket.on('message', data => { 
+    console.log(`[Client] ${data}`);
+    socket.send(data);
   });
   
   /*

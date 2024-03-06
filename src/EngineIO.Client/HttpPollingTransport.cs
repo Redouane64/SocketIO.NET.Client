@@ -1,5 +1,4 @@
 ﻿using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -9,21 +8,22 @@ namespace EngineIO.Client;
 
 public sealed class HttpPollingTransport : ITransport, IDisposable
 {
-    private static readonly int _protocol = 4;
-    private static readonly string _transport = "polling";
-
-    private readonly HttpClient _client;
     private readonly ILogger<HttpPollingTransport> _logger;
+    private readonly HttpClient _httpClient;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
-    private bool _handshake;
-    private bool _paused;
-    private string _path = $"/engine.io?EIO={_protocol}&transport={_transport}";
+    private readonly int _protocol = 4;
+    private readonly string _transport = "polling";
 
-    public HttpPollingTransport(HttpClient client, ILogger<HttpPollingTransport> logger)
+    private string _path;
+    private bool _handshake;
+
+    public HttpPollingTransport(string baseAddress, ILogger<HttpPollingTransport> logger)
     {
-        _client = client;
         _logger = logger;
+        _httpClient = new HttpClient();
+        _httpClient.BaseAddress = new Uri(baseAddress);
+        _path = $"/engine.io?EIO={_protocol}&transport={_transport}";
     }
 
     public int MaxPayload { get; private set; }
@@ -32,20 +32,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public string? Sid { get; private set; }
     public string[]? Upgrades { get; private set; }
     public string Transport => _transport;
-
-    internal string Path
-    {
-        get
-        {
-            if (!_handshake)
-            {
-                return _path;
-            }
-
-            _path = $"/engine.io?EIO={_protocol}&transport={_transport}&sid={Sid}";
-            return _path;
-        }
-    }
 
     public async IAsyncEnumerable<byte[]> PollAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -104,7 +90,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         try
         {
             await _semaphore.WaitAsync(cancellationToken);
-            data = await _client.GetByteArrayAsync(Path, cancellationToken);
+            data = await _httpClient.GetByteArrayAsync(_path, cancellationToken);
         }
         finally
         {
@@ -117,12 +103,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async Task SendAsync(byte[] packet,
         CancellationToken cancellationToken = default)
     {
-        if (_paused)
-        {
-            _logger.LogWarning("Attempt to send data while transport is in paused state");
-            return;
-        }
-        
         if (!_handshake)
         {
             throw new Exception("Transport is not connected");
@@ -138,7 +118,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             await _semaphore.WaitAsync(cancellationToken);
 
             using var content = new ByteArrayContent(packet);
-            using var response = await _client.PostAsync(Path, content,
+            using var response = await _httpClient.PostAsync(_path, content,
                 cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
@@ -183,19 +163,23 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         PingTimeout = handshake.PingTimeout;
         PingInterval = handshake.PingInterval;
 
+        _path += $"&sid={Sid}";
         _handshake = true;
-        Debug.WriteLine("Handshake completed successfully");
-
+        _logger.LogDebug("Handshake completed successfully");
     }
-
-    public void Pause()
+    
+    public Task Heartbeat(CancellationToken cancellationToken)
     {
-        _paused = true;
+#pragma warning disable CS4014
+        return SendAsync(new[] { (byte)PacketType.Pong }, cancellationToken)
+            .ContinueWith((_, _) => { _logger.LogDebug("Heartbeat sent"); }, null,
+                TaskContinuationOptions.OnlyOnRanToCompletion);
+#pragma warning restore CS4014
     }
 
     public void Dispose()
     {
-        _client.Dispose();
+        _httpClient.Dispose();
         _semaphore.Dispose();
     }
 

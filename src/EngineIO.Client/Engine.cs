@@ -1,23 +1,18 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
-using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client;
 
 public sealed class Engine : IDisposable
 {
-    private readonly HttpClient _httpClient;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<Engine> _logger;
-
     private readonly CancellationTokenSource _pollingCts = new();
-    private readonly CancellationTokenSource _connectionRetryCts = new();
-    
-    private readonly HttpPollingTransport _httpTransport;
-    private readonly Uri _baseHttpUrl;
-    
+
+    private readonly string _uri;
+    private HttpPollingTransport _httpTransport;
     private WebSocketTransport _wsTransport;
-    private readonly Uri _baseWsUrl;
     
     // Client state variables
     private bool _connected;
@@ -25,38 +20,33 @@ public sealed class Engine : IDisposable
     // storage for streamable messages
     private readonly ConcurrentQueue<byte[]> _streamablePackets = new();
 
+#pragma warning disable CS8618
     public Engine(string uri, ILoggerFactory loggerFactory)
+#pragma warning restore CS8618
     {
+        _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<Engine>();
-
-        _baseHttpUrl = new Uri(uri);
-
-        var uriBuilder = new StringBuilder();
-        var wsUriSchema = _baseHttpUrl.Scheme == Uri.UriSchemeHttps ? Uri.UriSchemeWss : Uri.UriSchemeWs;
-        uriBuilder.Append(wsUriSchema);
-        uriBuilder.Append("://");
-        uriBuilder.Append(_baseHttpUrl.Host);
-        if (!_baseHttpUrl.IsDefaultPort)
-        {
-            uriBuilder.Append($":{_baseHttpUrl.Port}");
-        }
-
-        _baseWsUrl = new Uri(uriBuilder.ToString());
-        
-        _httpClient = new HttpClient();
-        _httpClient.BaseAddress = new Uri(uri);
-        _httpTransport = new HttpPollingTransport(_httpClient, loggerFactory.CreateLogger<HttpPollingTransport>());
+        _uri = uri;
     }
 
     public void Dispose()
     {
         _pollingCts.Dispose();
-        _httpTransport.Dispose();
+        _httpTransport?.Dispose();
+        _wsTransport?.Dispose();
     }
 
     public async Task ConnectAsync()
     {
+        _httpTransport = new HttpPollingTransport(_uri, _loggerFactory.CreateLogger<HttpPollingTransport>());
         await _httpTransport.Handshake(_pollingCts.Token);
+        
+        if (_httpTransport.Upgrades!.Contains(_wsTransport.Transport))
+        {
+            _logger.LogDebug("Upgrading to Websocket transport");
+            await Upgrade();
+        }
+        
         _connected = true;
 #pragma warning disable CS4014
         Task.Run(StartPolling, _pollingCts.Token).ConfigureAwait(false);
@@ -97,7 +87,9 @@ public sealed class Engine : IDisposable
             if (packet[0] == (byte)PacketType.Ping)
             {
                 _logger.LogDebug("Heartbeat received");
-                Heartbeat().ConfigureAwait(false);
+#pragma warning disable CS4014
+                _httpTransport.Heartbeat(_pollingCts.Token).ConfigureAwait(false);
+#pragma warning restore CS4014
                 continue;
             }
 
@@ -117,24 +109,18 @@ public sealed class Engine : IDisposable
         }
     }
 
-    private Task Heartbeat()
+    private async Task Upgrade()
     {
-#pragma warning disable CS4014
-        return _httpTransport.SendAsync(new[] { (byte)PacketType.Pong }, _pollingCts.Token)
-            .ContinueWith((_, _) => { _logger.LogDebug("Heartbeat sent"); }, null,
-                TaskContinuationOptions.OnlyOnRanToCompletion);
-#pragma warning restore CS4014
-    }
-
-    public async Task Upgrade()
-    {
-        _httpTransport.Pause();
+        // TODO: complete any remaining packets from polling transport
+        
         await _pollingCts.CancelAsync();
 
-        var path = _httpTransport.Path.Replace("transport=polling", "transport=websocket");
-        _wsTransport = new WebSocketTransport($"{_baseWsUrl.ToString()}{path}");
+        _wsTransport = new WebSocketTransport(_uri, _httpTransport.Sid, _loggerFactory.CreateLogger<WebSocketTransport>());
         await _wsTransport.Handshake();
 
-        _logger.LogDebug("Connection upgraded to websocket transport");
+        _pollingCts.TryReset();
+#pragma warning disable CS4014
+        Task.Run(StartPolling, _pollingCts.Token).ConfigureAwait(false);
+#pragma warning restore CS4014
     }
 }

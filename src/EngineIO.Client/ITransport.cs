@@ -7,6 +7,11 @@ public interface ITransport
     /// </summary>
     string Transport { get; }
 
+    /// <summary>
+    /// Perform transport handshake.
+    /// </summary>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     Task Handshake(CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -20,6 +25,7 @@ public interface ITransport
     /// Send raw packets to server.
     /// </summary>
     /// <param name="packet">Packets encoded as Bytes</param>
+    /// <param name="cancellationToken"></param>
     Task SendAsync(byte[] packet,
         CancellationToken cancellationToken = default);
 

@@ -20,6 +20,11 @@ public class WebSocketTransport : ITransport, IDisposable
 
     public WebSocketTransport(string baseAddress, HandshakePacket handshakePacket, ILogger<WebSocketTransport> logger)
     {
+        if (handshakePacket.Sid is null)
+        {
+            throw new ArgumentException("Sid is missing");
+        }
+        
         if (baseAddress.StartsWith(Uri.UriSchemeHttp))
         {
             baseAddress = baseAddress.Replace("http://", "ws://");
@@ -30,12 +35,7 @@ public class WebSocketTransport : ITransport, IDisposable
             baseAddress = baseAddress.Replace("https://", "wss://");
         }
 
-        var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}";
-
-        if (handshakePacket.Sid is not null)
-        {
-            uri += $"&sid={handshakePacket.Sid}";
-        }
+        var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}&sid={handshakePacket.Sid}";
 
         _handshakePacket = handshakePacket;
 
@@ -49,7 +49,7 @@ public class WebSocketTransport : ITransport, IDisposable
         _client.Dispose();
     }
 
-    public string Name { get; } = "websocket";
+    public string Name => "websocket";
 
     public async Task Handshake(CancellationToken cancellationToken = default)
     {
@@ -95,13 +95,13 @@ public class WebSocketTransport : ITransport, IDisposable
 
     public async Task<byte[]> GetAsync(CancellationToken cancellationToken = default)
     {
-        var buffer = new byte[64];
+        var buffer = new byte[16];
         var receivedCount = 0;
 
         try
         {
             await _receiveSemaphore.WaitAsync(CancellationToken.None);
-            ;
+            
             WebSocketReceiveResult receiveResult;
             do
             {
@@ -112,6 +112,8 @@ public class WebSocketTransport : ITransport, IDisposable
                     await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
                     return null;
                 }
+
+                receivedCount += receiveResult.Count;
 
                 if (receiveResult.Count > receivedCount - buffer.Length)
                 {
@@ -125,12 +127,20 @@ public class WebSocketTransport : ITransport, IDisposable
             _receiveSemaphore.Release();
         }
 
-        return buffer;
+        return buffer.AsSpan(0, receivedCount).ToArray();
     }
 
-    public Task SendAsync(byte[] packet, CancellationToken cancellationToken = default)
+    public async Task SendAsync(byte[] packet, CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException();
+        try
+        {
+            await _sendSemaphore.WaitAsync(CancellationToken.None);
+            // TODO:
+        }
+        finally
+        {
+            _sendSemaphore.Release();
+        }
     }
 
     public async IAsyncEnumerable<byte[]> PollAsync(
@@ -139,12 +149,26 @@ public class WebSocketTransport : ITransport, IDisposable
         while (!cancellationToken.IsCancellationRequested)
         {
             var packet = await GetAsync(cancellationToken);
+
+            if (packet[0] == (byte)PacketType.Ping)
+            {
+                _logger.LogDebug("Heartbeat received");
+#pragma warning disable CS4014 
+                SendHeartbeat(cancellationToken);
+#pragma warning restore CS4014
+                continue;
+            }
+            
             yield return packet;
         }
     }
 
-    public Task Heartbeat(CancellationToken cancellationToken = default)
+    private ValueTask SendHeartbeat(CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
+#pragma warning disable CS4014
+        SendAsync(new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
+#pragma warning restore CS4014
+        return ValueTask.CompletedTask;
     }
+
 }

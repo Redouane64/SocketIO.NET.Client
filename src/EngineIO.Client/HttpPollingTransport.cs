@@ -52,7 +52,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 {
                     _logger.LogDebug("Heartbeat received");
 #pragma warning disable CS4014
-                    SendHeartbeat(cancellationToken).ConfigureAwait(false);
+                    SendHeartbeat(cancellationToken);
 #pragma warning restore CS4014
                     continue;
                 }
@@ -139,12 +139,12 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _logger.LogDebug("Handshake completed successfully");
     }
 
-    private Task SendHeartbeat(CancellationToken cancellationToken)
+    private ValueTask SendHeartbeat(CancellationToken cancellationToken)
     {
 #pragma warning disable CS4014
         SendAsync(new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
 #pragma warning restore CS4014
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     private async Task<IReadOnlyCollection<byte[]>> GetPackets(CancellationToken cancellationToken = default)

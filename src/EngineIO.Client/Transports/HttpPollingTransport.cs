@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
-namespace EngineIO.Client;
+namespace EngineIO.Client.Transport;
 
 public sealed class HttpPollingTransport : ITransport, IDisposable
 {

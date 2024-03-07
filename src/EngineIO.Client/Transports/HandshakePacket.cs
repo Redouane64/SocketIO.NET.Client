@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace EngineIO.Client;
+namespace EngineIO.Client.Transport;
 
 /// <summary>
 ///     Represents handshake response payload.

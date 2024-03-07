@@ -2,7 +2,7 @@ using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 
-namespace EngineIO.Client;
+namespace EngineIO.Client.Transport;
 
 public class WebSocketTransport : ITransport, IDisposable
 {
@@ -38,15 +38,15 @@ public class WebSocketTransport : ITransport, IDisposable
         var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}&sid={handshakePacket.Sid}";
 
         _handshakePacket = handshakePacket;
-
-        _uri = new Uri(uri);
         _logger = logger;
+        
+        _uri = new Uri(uri);
         _client = new ClientWebSocket();
     }
 
     public void Dispose()
     {
-        _client.Dispose();
+        _client?.Dispose();
     }
 
     public string Name => "websocket";

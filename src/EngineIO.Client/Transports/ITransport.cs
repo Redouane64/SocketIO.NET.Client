@@ -1,4 +1,4 @@
-namespace EngineIO.Client;
+namespace EngineIO.Client.Transport;
 
 public interface ITransport
 {

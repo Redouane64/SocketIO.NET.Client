@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using EngineIO.Client.Transport;
 using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client;
@@ -48,13 +49,15 @@ public sealed class Engine : IDisposable
         {
             _logger.LogDebug("Upgrading to Websocket transport");
             await Upgrade();
+            _pollingCancellationTokenSource = new CancellationTokenSource();
         }
 
         _connected = true;
+        _logger.LogDebug("Client connected");
+
 #pragma warning disable CS4014
         Task.Run(StartPolling, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014
-        _logger.LogDebug("Client connected");
     }
 
     public async Task DisconnectAsync()
@@ -110,8 +113,6 @@ public sealed class Engine : IDisposable
 
     private async Task Upgrade()
     {
-        // TODO: complete any remaining packets from polling transport
-
         await _pollingCancellationTokenSource.CancelAsync();
         _pollingCancellationTokenSource.Dispose();
 
@@ -119,10 +120,5 @@ public sealed class Engine : IDisposable
             new WebSocketTransport(_uri, _httpTransport.HandshakePacket!,
                 _loggerFactory.CreateLogger<WebSocketTransport>());
         await _wsTransport.Handshake();
-
-        _pollingCancellationTokenSource = new CancellationTokenSource();
-#pragma warning disable CS4014
-        Task.Run(StartPolling, _pollingCancellationTokenSource.Token);
-#pragma warning restore CS4014
     }
 }

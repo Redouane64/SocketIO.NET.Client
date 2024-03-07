@@ -63,6 +63,46 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             }
         }
     }
+    
+    private void SendHeartbeat(CancellationToken cancellationToken)
+    {
+#pragma warning disable CS4014
+        SendAsync(new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
+#pragma warning restore CS4014
+    }
+
+    /// <summary>
+    /// Split concatenated packets into a collection of packets.
+    /// <a href="https://github.com/socketio/engine.io-protocol?tab=readme-ov-file#http-long-polling-1">Packet encoding</a>
+    /// </summary>
+    /// <param name="cancellationToken"></param>
+    /// <returns>Packets</returns>
+    private async Task<IReadOnlyCollection<byte[]>> SplitPackets(CancellationToken cancellationToken = default)
+    {
+        var data = await GetAsync(cancellationToken);
+
+        var packets = new Collection<byte[]>();
+        var separator = 0x1E;
+
+        var start = 0;
+        for (var index = start; index < data.Length; index++)
+        {
+            if (data[index] == separator)
+            {
+                var packet = data.AsSpan(start..index).ToArray();
+                packets.Add(packet);
+                start = index + 1;
+            }
+        }
+
+        if (start < data.Length)
+        {
+            var packet = data.AsSpan(start).ToArray();
+            packets.Add(packet);
+        }
+
+        return packets;
+    }
 
     public async Task Disconnect()
     {
@@ -145,45 +185,5 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _path += $"&sid={HandshakePacket.Sid}";
         _handshake = true;
         _logger.LogDebug("Handshake completed successfully");
-    }
-
-    private void SendHeartbeat(CancellationToken cancellationToken)
-    {
-#pragma warning disable CS4014
-        SendAsync(new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
-#pragma warning restore CS4014
-    }
-
-    /// <summary>
-    /// Split concatenated packets into a collection of packets.
-    /// <a href="https://github.com/socketio/engine.io-protocol?tab=readme-ov-file#http-long-polling-1">Packet encoding</a>
-    /// </summary>
-    /// <param name="cancellationToken"></param>
-    /// <returns>Packets</returns>
-    private async Task<IReadOnlyCollection<byte[]>> SplitPackets(CancellationToken cancellationToken = default)
-    {
-        var data = await GetAsync(cancellationToken);
-
-        var packets = new Collection<byte[]>();
-        var separator = 0x1E;
-
-        var start = 0;
-        for (var index = start; index < data.Length; index++)
-        {
-            if (data[index] == separator)
-            {
-                var packet = data.AsSpan(start..index).ToArray();
-                packets.Add(packet);
-                start = index + 1;
-            }
-        }
-
-        if (start < data.Length)
-        {
-            var packet = data.AsSpan(start).ToArray();
-            packets.Add(packet);
-        }
-
-        return packets;
     }
 }

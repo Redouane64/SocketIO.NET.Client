@@ -59,33 +59,7 @@ public sealed class Engine : IDisposable
         Task.Run(StartPolling, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014
     }
-
-    public async Task DisconnectAsync()
-    {
-        if (!_connected)
-        {
-            return;
-        }
-
-        await _pollingCancellationTokenSource.CancelAsync();
-        await Transport.Disconnect();
-        _connected = false;
-    }
-
-    public async IAsyncEnumerable<byte[]> Stream(TimeSpan interval,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        using var timer = new PeriodicTimer(interval);
-
-        while (!cancellationToken.IsCancellationRequested && await timer.WaitForNextTickAsync(cancellationToken))
-        {
-            if (_streamablePackets.TryDequeue(out var packet))
-            {
-                yield return packet;
-            }
-        }
-    }
-
+    
     private void StartPolling()
     {
         StartTransportPolling(Transport).ConfigureAwait(false);
@@ -121,4 +95,31 @@ public sealed class Engine : IDisposable
                 _loggerFactory.CreateLogger<WebSocketTransport>());
         await _wsTransport.Handshake();
     }
+
+    public async Task DisconnectAsync()
+    {
+        if (!_connected)
+        {
+            return;
+        }
+
+        await _pollingCancellationTokenSource.CancelAsync();
+        await Transport.Disconnect();
+        _connected = false;
+    }
+
+    public async IAsyncEnumerable<byte[]> Stream(TimeSpan interval,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        using var timer = new PeriodicTimer(interval);
+
+        while (!cancellationToken.IsCancellationRequested && await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            if (_streamablePackets.TryDequeue(out var packet))
+            {
+                yield return packet;
+            }
+        }
+    }
+
 }

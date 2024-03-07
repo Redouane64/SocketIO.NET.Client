@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client.Transport;
 
-public class WebSocketTransport : ITransport, IDisposable
+public sealed class WebSocketTransport : ITransport, IDisposable
 {
     private readonly ClientWebSocket _client;
     private readonly ILogger<WebSocketTransport> _logger;

@@ -7,7 +7,7 @@ namespace EngineIO.Client;
 public class WebSocketTransport : ITransport, IDisposable
 {
     private readonly ClientWebSocket _client;
-    private readonly HandshakePacket _handshakePacket;
+    private readonly HandshakePacket? _handshakePacket;
     private readonly ILogger<WebSocketTransport> _logger;
 
     private readonly int _protocol = 4;
@@ -110,7 +110,7 @@ public class WebSocketTransport : ITransport, IDisposable
                 if (receiveResult.MessageType == WebSocketMessageType.Close)
                 {
                     await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-                    return null;
+                    break;
                 }
 
                 receivedCount += receiveResult.Count;
@@ -135,7 +135,7 @@ public class WebSocketTransport : ITransport, IDisposable
         try
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);
-            // TODO:
+            await _client.SendAsync(packet, WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage, cancellationToken);
         }
         finally
         {

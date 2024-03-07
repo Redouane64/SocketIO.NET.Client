@@ -24,7 +24,7 @@ internal class Program
 
         using var engine = new Engine("http://127.0.0.1:9854", logger);
         await engine.ConnectAsync();
-        
+
         var cts = new CancellationTokenSource();
 
         Task.Run(async () =>
@@ -34,7 +34,7 @@ internal class Program
                 Console.WriteLine("Server: {0}", Encoding.UTF8.GetString(message));
             }
         }, cts.Token).ConfigureAwait(false);
-        
+
         // await engine.Upgrade();
 
         Console.WriteLine("Streaming completed");

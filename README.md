@@ -8,8 +8,7 @@ Socket.IO .NET Client is an experimental project to implement Socket.IO protocol
   - [x] Implement Http Polling transport
   - [x] Implement Websocket transport
   - [ ] Implement packet serialization layer
-  - [ ] Handle packet encoding for polling and websocket transport 
-  (https://github.com/socketio/engine.io-protocol?tab=readme-ov-file#packet-encoding)
+  - [ ] Handle sending/receiving plaintext & binary packets: https://github.com/socketio/engine.io-protocol?tab=readme-ov-file#packet-encoding
 - [ ] Implement Socket.IO protocol on top of Engine.IO
 
 ## Resources

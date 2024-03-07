@@ -62,6 +62,11 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
     }
 
+    public async Task Disconnect()
+    {
+        await SendAsync(new[] { (byte)PacketType.Close });
+    }
+
     public async Task<byte[]> GetAsync(CancellationToken cancellationToken = default)
     {
         var data = Array.Empty<byte>();

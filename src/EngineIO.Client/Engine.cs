@@ -65,7 +65,7 @@ public sealed class Engine : IDisposable
         }
 
         await _pollingCancellationTokenSource.CancelAsync();
-        await DisconnectTransport(Transport);
+        await Transport.Disconnect();
         _connected = false;
     }
 

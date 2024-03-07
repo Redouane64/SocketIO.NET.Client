@@ -43,13 +43,12 @@ internal class Program
             Console.WriteLine("Streaming completed");
         }, cts.Token);
 
-        // await engine.Upgrade();
-
         Console.ReadKey();
         
         await cts.CancelAsync();
         Task.WaitAll(streaming);
         
         await engine.DisconnectAsync();
+        
     }
 }

@@ -24,7 +24,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }
 
-    public HandshakePacket HandshakePacket { get; set; }
+    public HandshakePacket? HandshakePacket { get; set; }
 
     public void Dispose()
     {
@@ -37,7 +37,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async IAsyncEnumerable<byte[]> PollAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var interval = Math.Abs(HandshakePacket.PingInterval - HandshakePacket.PingTimeout);
+        var interval = Math.Abs(HandshakePacket!.PingInterval - HandshakePacket.PingTimeout);
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(
             interval));
 
@@ -50,10 +50,10 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 // Handle heartbeat packet and yield the other packet types to the caller
                 if (packet[0] == (byte)PacketType.Ping)
                 {
-                    _logger.LogDebug("Heartbeat received");
 #pragma warning disable CS4014
                     SendHeartbeat(cancellationToken);
 #pragma warning restore CS4014
+                    _logger.LogDebug("Heartbeat completed");
                     continue;
                 }
 
@@ -85,7 +85,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             throw new Exception("Transport is not connected");
         }
 
-        if (packet.Length > HandshakePacket.MaxPayload)
+        if (packet.Length > HandshakePacket!.MaxPayload)
         {
             throw new Exception("Max packet payload exceeded");
         }
@@ -128,7 +128,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
 
         HandshakePacket = JsonSerializer
-            .Deserialize<HandshakePacket>(data.AsSpan()[1..]);
+            .Deserialize<HandshakePacket>(data.AsSpan(1));
         if (HandshakePacket is null)
         {
             throw new Exception("Invalid handshake packet");

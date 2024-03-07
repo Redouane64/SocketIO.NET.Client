@@ -14,6 +14,8 @@ public interface ITransport
     /// <returns></returns>
     Task Handshake(CancellationToken cancellationToken = default);
 
+    Task Disconnect();
+
     /// <summary>
     ///     Fetch raw packets from server.
     /// </summary>

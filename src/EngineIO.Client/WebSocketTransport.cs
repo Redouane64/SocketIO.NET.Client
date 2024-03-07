@@ -63,16 +63,11 @@ public class WebSocketTransport : ITransport, IDisposable
         // ping probe
         var pingProbePacket = new[]
             { (byte)PacketType.Ping, (byte)'p', (byte)'r', (byte)'o', (byte)'b', (byte)'e' };
-        await _client.SendAsync(
-            new ArraySegment<byte>(pingProbePacket),
-            WebSocketMessageType.Text,
-            false,
-            cancellationToken);
+        await SendAsync(pingProbePacket, cancellationToken);
         _logger.LogDebug("Probe sent");
 
         // pong probe
-        var pongProbePacket = new byte[6];
-        await _client.ReceiveAsync(new Memory<byte>(pongProbePacket), cancellationToken);
+        var pongProbePacket = await GetAsync(cancellationToken);
 
         if (pongProbePacket[0] != (byte)PacketType.Pong)
         {
@@ -83,14 +78,16 @@ public class WebSocketTransport : ITransport, IDisposable
 
         // upgrade
         var upgradePacket = new byte[1] { (byte)PacketType.Upgrade };
-        await _client.SendAsync(
-            new ArraySegment<byte>(upgradePacket),
-            WebSocketMessageType.Text,
-            false,
-            cancellationToken);
+        await SendAsync(upgradePacket, cancellationToken);
 
         _logger.LogDebug("Upgrade completed");
         _handshakeCompleted = true;
+    }
+
+    public Task Disconnect()
+    {
+        _client.Abort();
+        return Task.CompletedTask;
     }
 
     public async Task<byte[]> GetAsync(CancellationToken cancellationToken = default)
@@ -120,7 +117,7 @@ public class WebSocketTransport : ITransport, IDisposable
                     Array.Resize(ref buffer, buffer.Length + receivedCount);
                 }
 
-            } while (receiveResult.EndOfMessage);
+            } while (!receiveResult.EndOfMessage);
         }
         finally
         {
@@ -132,6 +129,11 @@ public class WebSocketTransport : ITransport, IDisposable
 
     public async Task SendAsync(byte[] packet, CancellationToken cancellationToken = default)
     {
+        if (_client.State == WebSocketState.Closed)
+        {
+            throw new Exception("Connection closed unexpectedly");
+        }
+        
         try
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);

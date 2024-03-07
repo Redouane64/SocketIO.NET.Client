@@ -7,16 +7,16 @@ namespace EngineIO.Client;
 public class WebSocketTransport : ITransport, IDisposable
 {
     private readonly ClientWebSocket _client;
-    private readonly HandshakePacket? _handshakePacket;
     private readonly ILogger<WebSocketTransport> _logger;
 
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _receiveSemaphore = new(1, 1);
-
     private readonly SemaphoreSlim _sendSemaphore = new(1, 1);
 
+    private readonly CancellationTokenSource _pollingCancellationToken = new();
+    private readonly HandshakePacket? _handshakePacket;
     private readonly Uri _uri;
-    private bool _handshakeCompleted;
+    private bool _handshake;
 
     public WebSocketTransport(string baseAddress, HandshakePacket handshakePacket, ILogger<WebSocketTransport> logger)
     {
@@ -24,7 +24,7 @@ public class WebSocketTransport : ITransport, IDisposable
         {
             throw new ArgumentException("Sid is missing");
         }
-        
+
         if (baseAddress.StartsWith(Uri.UriSchemeHttp))
         {
             baseAddress = baseAddress.Replace("http://", "ws://");
@@ -53,7 +53,7 @@ public class WebSocketTransport : ITransport, IDisposable
 
     public async Task Handshake(CancellationToken cancellationToken = default)
     {
-        if (_handshakeCompleted)
+        if (_handshake)
         {
             return;
         }
@@ -81,13 +81,13 @@ public class WebSocketTransport : ITransport, IDisposable
         await SendAsync(upgradePacket, cancellationToken);
 
         _logger.LogDebug("Upgrade completed");
-        _handshakeCompleted = true;
+        _handshake = true;
     }
 
-    public Task Disconnect()
+    public async Task Disconnect()
     {
+        await _pollingCancellationToken.CancelAsync();
         _client.Abort();
-        return Task.CompletedTask;
     }
 
     public async Task<byte[]> GetAsync(CancellationToken cancellationToken = default)
@@ -98,7 +98,7 @@ public class WebSocketTransport : ITransport, IDisposable
         try
         {
             await _receiveSemaphore.WaitAsync(CancellationToken.None);
-            
+
             WebSocketReceiveResult receiveResult;
             do
             {
@@ -107,6 +107,7 @@ public class WebSocketTransport : ITransport, IDisposable
                 if (receiveResult.MessageType == WebSocketMessageType.Close)
                 {
                     await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                    _logger.LogDebug("Connection closed by the remote server");
                     break;
                 }
 
@@ -133,7 +134,7 @@ public class WebSocketTransport : ITransport, IDisposable
         {
             throw new Exception("Connection closed unexpectedly");
         }
-        
+
         try
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);
@@ -148,7 +149,10 @@ public class WebSocketTransport : ITransport, IDisposable
     public async IAsyncEnumerable<byte[]> PollAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        while (!cancellationToken.IsCancellationRequested)
+        using var cts =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _pollingCancellationToken.Token);
+
+        while (!cts.IsCancellationRequested)
         {
             var packet = await GetAsync(cancellationToken);
 
@@ -160,17 +164,16 @@ public class WebSocketTransport : ITransport, IDisposable
 #pragma warning restore CS4014
                 continue;
             }
-            
+
             yield return packet;
         }
     }
 
-    private ValueTask SendHeartbeat(CancellationToken cancellationToken)
+    private void SendHeartbeat(CancellationToken cancellationToken)
     {
 #pragma warning disable CS4014
         SendAsync(new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
 #pragma warning restore CS4014
-        return ValueTask.CompletedTask;
     }
 
 }

@@ -52,7 +52,7 @@ public sealed class Engine : IDisposable
 
         _connected = true;
 #pragma warning disable CS4014
-        Task.Run(StartPolling, _pollingCancellationTokenSource.Token).ConfigureAwait(false);
+        Task.Run(StartPolling, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014
         _logger.LogDebug("Client connected");
     }
@@ -83,15 +83,14 @@ public sealed class Engine : IDisposable
         }
     }
 
-    private async Task StartPolling()
+    private void StartPolling()
     {
-        await StartTransportPolling(Transport);
+        StartTransportPolling(Transport).ConfigureAwait(false);
     }
 
     private async Task StartTransportPolling(ITransport transport)
     {
-        await foreach (var packet in transport.PollAsync(_pollingCancellationTokenSource.Token)
-                           .ConfigureAwait(false))
+        await foreach (var packet in transport.PollAsync(_pollingCancellationTokenSource.Token))
         {
             if (packet[0] == (byte)PacketType.Close)
             {
@@ -115,7 +114,7 @@ public sealed class Engine : IDisposable
 
         await _pollingCancellationTokenSource.CancelAsync();
         _pollingCancellationTokenSource.Dispose();
-        
+
         Transport = _wsTransport =
             new WebSocketTransport(_uri, _httpTransport.HandshakePacket!,
                 _loggerFactory.CreateLogger<WebSocketTransport>());
@@ -123,7 +122,7 @@ public sealed class Engine : IDisposable
 
         _pollingCancellationTokenSource = new CancellationTokenSource();
 #pragma warning disable CS4014
-        Task.Run(StartPolling, _pollingCancellationTokenSource.Token).ConfigureAwait(false);
+        Task.Run(StartPolling, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014
     }
 }

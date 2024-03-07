@@ -5,11 +5,32 @@ namespace EngineIO.Client;
 /// </summary>
 public enum PacketType : byte
 {
-    Open = 0x30, // 0
-    Close = 0x31, // 1
-    Ping = 0x32, // 2
-    Pong = 0x33, // 3
-    Message = 0x34, // 4
-    Upgrade = 0x35, // 5
-    Noop = 0x36 // 6
+    /// <summary>
+    /// Packet type 0
+    /// </summary>
+    Open = 0x30,
+    /// <summary>
+    /// Packet type 1
+    /// </summary>
+    Close = 0x31,
+    /// <summary>
+    /// Packet type 2
+    /// </summary>
+    Ping = 0x32,
+    /// <summary>
+    /// Packet type 3
+    /// </summary>
+    Pong = 0x33,
+    /// <summary>
+    /// Packet type 4
+    /// </summary>
+    Message = 0x34,
+    /// <summary>
+    /// Packet type 5
+    /// </summary>
+    Upgrade = 0x35,
+    /// <summary>
+    /// Packet type 6
+    /// </summary>
+    Noop = 0x36
 }

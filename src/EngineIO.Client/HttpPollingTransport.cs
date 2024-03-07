@@ -12,8 +12,8 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private readonly CancellationTokenSource _pollingCancellationToken = new();
     private bool _handshake;
-
     private string _path;
 
     public HttpPollingTransport(string baseAddress, ILogger<HttpPollingTransport> logger)
@@ -37,21 +37,23 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async IAsyncEnumerable<byte[]> PollAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        // TODO: maybe interval value should be exposed to consumer.
         var interval = Math.Abs(HandshakePacket!.PingInterval - HandshakePacket.PingTimeout);
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(
             interval));
-
-        while (!cancellationToken.IsCancellationRequested &&
-               await timer.WaitForNextTickAsync(cancellationToken))
+        using var cts =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _pollingCancellationToken.Token);
+        while (!cts.IsCancellationRequested &&
+               await timer.WaitForNextTickAsync(cts.Token))
         {
-            var packets = await GetPackets(cancellationToken);
+            var packets = await ParsePackets(cts.Token);
             foreach (var packet in packets)
             {
                 // Handle heartbeat packet and yield the other packet types to the caller
                 if (packet[0] == (byte)PacketType.Ping)
                 {
 #pragma warning disable CS4014
-                    SendHeartbeat(cancellationToken);
+                    SendHeartbeat(cts.Token);
 #pragma warning restore CS4014
                     _logger.LogDebug("Heartbeat completed");
                     continue;
@@ -65,6 +67,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async Task Disconnect()
     {
         await SendAsync(new[] { (byte)PacketType.Close });
+        await _pollingCancellationToken.CancelAsync();
     }
 
     public async Task<byte[]> GetAsync(CancellationToken cancellationToken = default)
@@ -144,15 +147,19 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _logger.LogDebug("Handshake completed successfully");
     }
 
-    private ValueTask SendHeartbeat(CancellationToken cancellationToken)
+    private void SendHeartbeat(CancellationToken cancellationToken)
     {
 #pragma warning disable CS4014
         SendAsync(new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
 #pragma warning restore CS4014
-        return ValueTask.CompletedTask;
     }
 
-    private async Task<IReadOnlyCollection<byte[]>> GetPackets(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Parse concatenated packets into a collection of packets.
+    /// </summary>
+    /// <param name="cancellationToken"></param>
+    /// <returns>Packets</returns>
+    private async Task<IReadOnlyCollection<byte[]>> ParsePackets(CancellationToken cancellationToken = default)
     {
         var data = await GetAsync(cancellationToken);
 

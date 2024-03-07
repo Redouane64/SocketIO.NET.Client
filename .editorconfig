@@ -4,6 +4,12 @@ root = true
 [*]
 indent_style = space
 
+# Microsoft .NET properties
+csharp_indent_braces = false
+csharp_new_line_before_open_brace = accessors, anonymous_methods, control_blocks, events, indexers, lambdas, local_functions, methods, properties, types
+csharp_preferred_modifier_order = public, private, protected, internal, file, new, required, abstract, virtual, static, override, sealed, extern, unsafe, volatile, readonly, async:suggestion
+csharp_prefer_braces = true:none
+
 # C# files
 [*.cs]
 
@@ -14,6 +20,7 @@ end_of_line = crlf
 insert_final_newline = true
 
 csharp_prefer_braces = true:error
+csharp_new_line_before_open_brace = all
 
 [*.js]
 indent_size = 2

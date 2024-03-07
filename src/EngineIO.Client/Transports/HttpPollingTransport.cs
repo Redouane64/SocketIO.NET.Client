@@ -46,7 +46,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         while (!cts.IsCancellationRequested &&
                await timer.WaitForNextTickAsync(cts.Token))
         {
-            var packets = await ParsePackets(cts.Token);
+            var packets = await SplitPackets(cts.Token);
             foreach (var packet in packets)
             {
                 // Handle heartbeat packet and yield the other packet types to the caller
@@ -155,11 +155,12 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     }
 
     /// <summary>
-    /// Parse concatenated packets into a collection of packets.
+    /// Split concatenated packets into a collection of packets.
+    /// <a href="https://github.com/socketio/engine.io-protocol?tab=readme-ov-file#http-long-polling-1">Packet encoding</a>
     /// </summary>
     /// <param name="cancellationToken"></param>
     /// <returns>Packets</returns>
-    private async Task<IReadOnlyCollection<byte[]>> ParsePackets(CancellationToken cancellationToken = default)
+    private async Task<IReadOnlyCollection<byte[]>> SplitPackets(CancellationToken cancellationToken = default)
     {
         var data = await GetAsync(cancellationToken);
 

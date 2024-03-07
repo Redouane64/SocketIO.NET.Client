@@ -27,19 +27,29 @@ internal class Program
 
         var cts = new CancellationTokenSource();
 
-        Task.Run(async () =>
+        var streaming = Task.Run(async () =>
         {
-            await foreach (var message in engine.Stream(TimeSpan.FromSeconds(1), cts.Token))
+            try
             {
-                Console.WriteLine("Server: {0}", Encoding.UTF8.GetString(message));
+                await foreach (var message in engine.Stream(TimeSpan.FromSeconds(1), cts.Token))
+                {
+                    Console.WriteLine("Server: {0}", Encoding.UTF8.GetString(message));
+                }
             }
-        }, cts.Token).ConfigureAwait(false);
+            catch (Exception exception)
+            {
+                // TODO:
+            }
+            Console.WriteLine("Streaming completed");
+        }, cts.Token);
 
         // await engine.Upgrade();
 
-        Console.WriteLine("Streaming completed");
         Console.ReadKey();
+        
         await cts.CancelAsync();
+        Task.WaitAll(streaming);
+        
         await engine.DisconnectAsync();
     }
 }

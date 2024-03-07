@@ -8,7 +8,6 @@ public sealed class Engine : IDisposable
 {
     private readonly ILogger<Engine> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
 
     // storage for streamable messages
     private readonly ConcurrentQueue<byte[]> _streamablePackets = new();
@@ -16,10 +15,11 @@ public sealed class Engine : IDisposable
     private readonly string _uri;
 
     // Client state variables
-    private bool _autoUpgrade = false;
+    private bool _autoUpgrade = true;
     private bool _connected;
     private HttpPollingTransport _httpTransport;
     private WebSocketTransport? _wsTransport;
+    private CancellationTokenSource _pollingCancellationTokenSource = new();
 
 #pragma warning disable CS8618
     public Engine(string uri, ILoggerFactory loggerFactory)
@@ -69,11 +69,6 @@ public sealed class Engine : IDisposable
         _connected = false;
     }
 
-    private async Task DisconnectTransport(ITransport transport)
-    {
-        await transport.SendAsync(new[] { (byte)PacketType.Close });
-    }
-
     public async IAsyncEnumerable<byte[]> Stream(TimeSpan interval,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -119,13 +114,14 @@ public sealed class Engine : IDisposable
         // TODO: complete any remaining packets from polling transport
 
         await _pollingCancellationTokenSource.CancelAsync();
-
+        _pollingCancellationTokenSource.Dispose();
+        
         Transport = _wsTransport =
             new WebSocketTransport(_uri, _httpTransport.HandshakePacket!,
                 _loggerFactory.CreateLogger<WebSocketTransport>());
         await _wsTransport.Handshake();
 
-        _pollingCancellationTokenSource.TryReset();
+        _pollingCancellationTokenSource = new CancellationTokenSource();
 #pragma warning disable CS4014
         Task.Run(StartPolling, _pollingCancellationTokenSource.Token).ConfigureAwait(false);
 #pragma warning restore CS4014

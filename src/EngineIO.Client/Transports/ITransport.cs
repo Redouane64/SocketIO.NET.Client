@@ -28,9 +28,10 @@ public interface ITransport
     /// <summary>
     ///     Send raw packets to server.
     /// </summary>
+    /// <param name="format"></param>
     /// <param name="packet">Packets encoded as Bytes</param>
     /// <param name="cancellationToken"></param>
-    Task SendAsync(byte[] packet,
+    Task SendAsync(PacketFormat format, ReadOnlyMemory<byte> packet,
         CancellationToken cancellationToken = default);
 
     /// <summary>

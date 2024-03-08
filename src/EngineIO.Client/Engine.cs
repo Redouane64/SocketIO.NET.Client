@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Text;
 using EngineIO.Client.Packet;
 using EngineIO.Client.Transport;
 using Microsoft.Extensions.Logging;
@@ -121,6 +122,27 @@ public sealed class Engine : IDisposable
                 yield return packet;
             }
         }
+    }
+
+    /// <summary>
+    /// Send plain text message.
+    /// </summary>
+    /// <param name="text">Plain text message</param>
+    /// <param name="cancellationToken"></param>
+    public async Task SendAsync(string text, CancellationToken cancellationToken = default)
+    {
+        var packet = Encoding.UTF8.GetBytes(text);
+        await Transport.SendAsync(PacketFormat.PlainText, packet, cancellationToken);
+    }
+
+    /// <summary>
+    /// Send binary message.
+    /// </summary>
+    /// <param name="binary">Binary data</param>
+    /// <param name="cancellationToken"></param>
+    public async Task SendAsync(byte[] binary, CancellationToken cancellationToken = default)
+    {
+        await Transport.SendAsync(PacketFormat.Binary, binary, cancellationToken);
     }
 
 }

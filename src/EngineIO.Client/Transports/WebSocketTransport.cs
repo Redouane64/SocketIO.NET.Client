@@ -15,7 +15,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     private readonly SemaphoreSlim _sendSemaphore = new(1, 1);
 
     private readonly CancellationTokenSource _pollingCancellationToken = new();
-    private readonly HandshakePacket? _handshakePacket;
     private readonly Uri _uri;
     private bool _handshake;
 
@@ -38,12 +37,15 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
         var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}&sid={handshakePacket.Sid}";
 
-        _handshakePacket = handshakePacket;
+        HandshakePacket = handshakePacket;
         _logger = logger;
         
         _uri = new Uri(uri);
         _client = new ClientWebSocket();
     }
+    
+    public HandshakePacket? HandshakePacket { get; }
+    public string Name => "websocket";
 
     public void Dispose()
     {
@@ -52,8 +54,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _sendSemaphore.Dispose();
         _pollingCancellationToken.Dispose();
     }
-
-    public string Name => "websocket";
 
     public async Task Handshake(CancellationToken cancellationToken = default)
     {
@@ -67,7 +67,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         // ping probe
         var pingProbePacket = new[]
             { (byte)PacketType.Ping, (byte)'p', (byte)'r', (byte)'o', (byte)'b', (byte)'e' };
-        await SendAsync(pingProbePacket, cancellationToken);
+        await SendAsync(PacketFormat.PlainText, pingProbePacket, cancellationToken);
         _logger.LogDebug("Probe sent");
 
         // pong probe
@@ -82,7 +82,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
         // upgrade
         var upgradePacket = new byte[1] { (byte)PacketType.Upgrade };
-        await SendAsync(upgradePacket, cancellationToken);
+        await SendAsync(PacketFormat.PlainText, upgradePacket, cancellationToken);
 
         _logger.LogDebug("Upgrade completed");
         _handshake = true;
@@ -132,7 +132,8 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         return buffer.AsSpan(0, receivedCount).ToArray();
     }
 
-    public async Task SendAsync(byte[] packet, CancellationToken cancellationToken = default)
+    public async Task SendAsync(PacketFormat format, ReadOnlyMemory<byte> packet,
+        CancellationToken cancellationToken = default)
     {
         if (_client.State == WebSocketState.Closed)
         {
@@ -176,7 +177,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     private void SendHeartbeat(CancellationToken cancellationToken)
     {
 #pragma warning disable CS4014
-        SendAsync(new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
+        SendAsync(PacketFormat.PlainText, new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
 #pragma warning restore CS4014
     }
 

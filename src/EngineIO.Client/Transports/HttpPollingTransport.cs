@@ -1,4 +1,5 @@
 ﻿using System.Collections.ObjectModel;
+using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using EngineIO.Client.Packet;
@@ -25,7 +26,8 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }
 
-    public HandshakePacket? HandshakePacket { get; set; }
+    public HandshakePacket? HandshakePacket { get; private set; }
+    public string Name => "polling";
 
     public void Dispose()
     {
@@ -33,9 +35,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _semaphore.Dispose();
         _pollingCancellationToken.Dispose();
     }
-
-    public string Name => "polling";
-
+    
     public async IAsyncEnumerable<byte[]> PollAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -69,7 +69,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private void SendHeartbeat(CancellationToken cancellationToken)
     {
 #pragma warning disable CS4014
-        SendAsync(new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
+        SendAsync(PacketFormat.PlainText, new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
 #pragma warning restore CS4014
     }
 
@@ -108,7 +108,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     public async Task Disconnect()
     {
-        await SendAsync(new[] { (byte)PacketType.Close });
+        await SendAsync(PacketFormat.PlainText, new[] { (byte)PacketType.Close });
         await _pollingCancellationToken.CancelAsync();
     }
 
@@ -128,7 +128,8 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         return data;
     }
 
-    public async Task SendAsync(byte[] packet, CancellationToken cancellationToken = default)
+    public async Task SendAsync(PacketFormat format, ReadOnlyMemory<byte> packet,
+        CancellationToken cancellationToken = default)
     {
         if (!_handshake)
         {
@@ -140,11 +141,24 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             throw new Exception("Max packet payload exceeded");
         }
 
+        HttpContent? content = null;
         try
         {
             await _semaphore.WaitAsync(cancellationToken);
 
-            using var content = new ByteArrayContent(packet);
+            if (format == PacketFormat.Binary)
+            {
+                var base64Encoded = Convert.ToBase64String(packet.ToArray());
+                packet = Convert.FromBase64String(base64Encoded);
+                content = new ReadOnlyMemoryContent(packet);
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            }
+            else
+            {
+                content = new ReadOnlyMemoryContent(packet);
+                content.Headers.ContentType = new MediaTypeHeaderValue("text/plain", "utf-8");
+            }
+            
             using var response = await _httpClient.PostAsync(_path, content,
                 cancellationToken);
             if (!response.IsSuccessStatusCode)

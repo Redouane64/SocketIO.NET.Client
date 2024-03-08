@@ -47,7 +47,10 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     public void Dispose()
     {
-        _client?.Dispose();
+        _client.Dispose();
+        _receiveSemaphore.Dispose();
+        _sendSemaphore.Dispose();
+        _pollingCancellationToken.Dispose();
     }
 
     public string Name => "websocket";

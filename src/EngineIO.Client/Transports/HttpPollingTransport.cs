@@ -31,6 +31,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     {
         _httpClient.Dispose();
         _semaphore.Dispose();
+        _pollingCancellationToken.Dispose();
     }
 
     public string Name => "polling";
@@ -158,6 +159,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         finally
         {
             _semaphore.Release();
+            content?.Dispose();
         }
     }
 

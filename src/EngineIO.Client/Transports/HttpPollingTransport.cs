@@ -1,6 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using EngineIO.Client.Packet;
 using Microsoft.Extensions.Logging;
@@ -128,7 +129,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         return data;
     }
 
-    public async Task SendAsync(PacketFormat format, ReadOnlyMemory<byte> packet,
+    public async Task SendAsync(PacketFormat format, byte[] packet,
         CancellationToken cancellationToken = default)
     {
         if (!_handshake)
@@ -148,14 +149,20 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
             if (format == PacketFormat.Binary)
             {
-                var base64Encoded = Convert.ToBase64String(packet.ToArray());
-                packet = Convert.FromBase64String(base64Encoded);
-                content = new ReadOnlyMemoryContent(packet);
+                // Binary message format example:
+                // bAQIDBA==
+                // 
+                var builder = new StringBuilder();
+                builder.Append('b');
+                builder.Append(Convert.ToBase64String(packet));
+                
+                content = new ReadOnlyMemoryContent(Encoding.UTF8.GetBytes(builder.ToString()));
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
             }
             else
             {
                 content = new ReadOnlyMemoryContent(packet);
+                // this optional and not specified by the protocol
                 content.Headers.ContentType = new MediaTypeHeaderValue("text/plain", "utf-8");
             }
             

@@ -31,7 +31,7 @@ public interface ITransport
     /// <param name="format"></param>
     /// <param name="packet">Packets encoded as Bytes</param>
     /// <param name="cancellationToken"></param>
-    Task SendAsync(PacketFormat format, ReadOnlyMemory<byte> packet,
+    Task SendAsync(PacketFormat format, byte[] packet,
         CancellationToken cancellationToken = default);
 
     /// <summary>

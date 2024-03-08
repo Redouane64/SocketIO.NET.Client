@@ -132,7 +132,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         return buffer.AsSpan(0, receivedCount).ToArray();
     }
 
-    public async Task SendAsync(PacketFormat format, ReadOnlyMemory<byte> packet,
+    public async Task SendAsync(PacketFormat format, byte[] packet,
         CancellationToken cancellationToken = default)
     {
         if (_client.State == WebSocketState.Closed)

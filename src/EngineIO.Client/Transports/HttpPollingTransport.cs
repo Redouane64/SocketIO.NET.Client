@@ -3,7 +3,7 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using EngineIO.Client.Packet;
+using EngineIO.Client.Packets;
 using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client.Transport;
@@ -37,15 +37,16 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _pollingCancellationToken.Dispose();
     }
     
-    public async IAsyncEnumerable<byte[]> PollAsync(
+    public async IAsyncEnumerable<Packet> PollAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // TODO: maybe interval value should be exposed to consumer.
         var interval = Math.Abs(HandshakePacket!.PingInterval - HandshakePacket.PingTimeout);
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(
-            interval));
-        using var cts =
-            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _pollingCancellationToken.Token);
+        
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(interval));
+        using var cts = CancellationTokenSource
+            .CreateLinkedTokenSource(cancellationToken, _pollingCancellationToken.Token);
+        
         while (!cts.IsCancellationRequested &&
                await timer.WaitForNextTickAsync(cts.Token))
         {
@@ -62,7 +63,23 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                     continue;
                 }
 
-                yield return packet;
+                PacketFormat format;
+                ReadOnlyMemory<byte> content;
+                PacketType type = PacketType.Message;
+                if (packet[0] == 98)
+                {
+                    format = PacketFormat.Binary;
+                    // skip 'b' from base64 message
+                    content = new ReadOnlyMemory<byte>(packet, 1, packet.Length - 1);
+                }
+                else
+                {
+                    format = PacketFormat.PlainText;
+                    content = new ReadOnlyMemory<byte>(packet);
+                    type = (PacketType)content.Span[0];
+                }
+                
+                yield return new Packet(format, type, content);
             }
         }
     }
@@ -124,12 +141,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         finally
         {
             _semaphore.Release();
-        }
-
-        var isBinary = data[0] == 98;
-        if (isBinary)
-        {
-            return data.AsSpan(1).ToArray();
         }
 
         return data;

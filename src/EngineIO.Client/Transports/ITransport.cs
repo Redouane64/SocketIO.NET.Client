@@ -1,4 +1,4 @@
-using EngineIO.Client.Packet;
+using EngineIO.Client.Packets;
 
 namespace EngineIO.Client.Transport;
 
@@ -38,6 +38,6 @@ public interface ITransport
     ///     Start polling server periodically and stream packets back to the caller.
     /// </summary>
     /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    IAsyncEnumerable<byte[]> PollAsync(CancellationToken cancellationToken = default);
+    /// <returns>Packets stream</returns>
+    IAsyncEnumerable<Packet> PollAsync(CancellationToken cancellationToken = default);
 }

@@ -1,45 +1,36 @@
-namespace EngineIO.Client.Packet;
+using System.Text;
+
+namespace EngineIO.Client.Packets;
 
 /// <summary>
-///     Represent EIO protocol packet types. see: https://socket.io/docs/v4/engine-io-protocol/#protocol
+/// Represent a message packet.
 /// </summary>
-public enum PacketType : byte
+public struct Packet
 {
-    /// <summary>
-    /// Packet type 0
-    /// </summary>
-    Open = 0x30,
-    /// <summary>
-    /// Packet type 1
-    /// </summary>
-    Close = 0x31,
-    /// <summary>
-    /// Packet type 2
-    /// </summary>
-    Ping = 0x32,
-    /// <summary>
-    /// Packet type 3
-    /// </summary>
-    Pong = 0x33,
-    /// <summary>
-    /// Packet type 4
-    /// </summary>
-    Message = 0x34,
-    /// <summary>
-    /// Packet type 5
-    /// </summary>
-    Upgrade = 0x35,
-    /// <summary>
-    /// Packet type 6
-    /// </summary>
-    Noop = 0x36
-}
+    public Packet(PacketFormat format, PacketType type, ReadOnlyMemory<byte> content)
+    {
+        Format = format;
+        Content = content;
+        Type = format == PacketFormat.Binary ? PacketType.Message : type;
+    }
 
-/// <summary>
-/// Represents send packet payload format.
-/// </summary>
-public enum PacketFormat
-{
-    PlainText,
-    Binary,
+    /// <summary>
+    /// Represents packet type.
+    /// </summary>
+    public PacketType? Type { get; }
+
+    /// <summary>
+    /// Indicate content format stored in the packet.
+    /// </summary>
+    public PacketFormat Format { get; }
+
+    /// <summary>
+    /// Packet content.
+    /// </summary>
+    public ReadOnlyMemory<byte> Content { get; }
+
+    public override string ToString()
+    {
+        return Encoding.UTF8.GetString(Content.Span);
+    }
 }

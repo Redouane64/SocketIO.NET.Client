@@ -126,6 +126,12 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             _semaphore.Release();
         }
 
+        var isBinary = data[0] == 98;
+        if (isBinary)
+        {
+            return data.AsSpan(1).ToArray();
+        }
+
         return data;
     }
 

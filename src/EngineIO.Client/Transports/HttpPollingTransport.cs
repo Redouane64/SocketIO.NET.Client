@@ -1,6 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using EngineIO.Client.Packet;
 using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client.Transport;

@@ -1,3 +1,5 @@
+using EngineIO.Client.Packet;
+
 namespace EngineIO.Client.Transport;
 
 public interface ITransport

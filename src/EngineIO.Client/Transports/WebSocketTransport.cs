@@ -1,5 +1,6 @@
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
+using EngineIO.Client.Packet;
 using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client.Transport;

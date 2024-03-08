@@ -1,4 +1,4 @@
-namespace EngineIO.Client;
+namespace EngineIO.Client.Packet;
 
 /// <summary>
 ///     Represent EIO protocol packet types. see: https://socket.io/docs/v4/engine-io-protocol/#protocol
@@ -33,4 +33,13 @@ public enum PacketType : byte
     /// Packet type 6
     /// </summary>
     Noop = 0x36
+}
+
+/// <summary>
+/// Represents send packet payload format.
+/// </summary>
+public enum PacketFormat
+{
+    PlainText,
+    Binary,
 }

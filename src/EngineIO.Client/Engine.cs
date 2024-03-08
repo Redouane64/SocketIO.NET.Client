@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using EngineIO.Client.Packet;
 using EngineIO.Client.Transport;
 using Microsoft.Extensions.Logging;
 

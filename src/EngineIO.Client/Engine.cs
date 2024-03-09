@@ -18,19 +18,20 @@ public sealed class Engine : IDisposable
     private readonly string _uri;
 
     // Client state variables
-    private bool _autoUpgrade = true;
+    private readonly ClientOptions _clientOptions = new();
+    
     private bool _connected;
     private HttpPollingTransport _httpTransport;
     private WebSocketTransport? _wsTransport;
     private CancellationTokenSource _pollingCancellationTokenSource = new();
 
 #pragma warning disable CS8618
-    public Engine(string uri, ILoggerFactory loggerFactory)
+    public Engine(Action<ClientOptions> configure, ILoggerFactory loggerFactory)
 #pragma warning restore CS8618
     {
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<Engine>();
-        _uri = uri;
+        configure(_clientOptions);
     }
 
     public ITransport Transport { get; private set; }
@@ -69,7 +70,7 @@ public sealed class Engine : IDisposable
 
     private async Task StartTransportPolling(ITransport transport)
     {
-        await foreach (var packet in transport.PollAsync(_pollingCancellationTokenSource.Token))
+        await foreach (var packet in transport.PollAsync(_clientOptions.PollingInterval, _pollingCancellationTokenSource.Token))
         {
             if (packet[0] == (byte)PacketType.Close)
             {

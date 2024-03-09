@@ -37,7 +37,8 @@ public interface ITransport
     /// <summary>
     ///     Start polling server periodically and stream packets back to the caller.
     /// </summary>
+    /// <param name="interval"></param>
     /// <param name="cancellationToken"></param>
     /// <returns>Packets stream</returns>
-    IAsyncEnumerable<Packet> PollAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<Packet> PollAsync(int interval, CancellationToken cancellationToken = default);
 }

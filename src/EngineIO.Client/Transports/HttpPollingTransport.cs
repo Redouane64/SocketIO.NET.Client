@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using EngineIO.Client.Packets;
 using Microsoft.Extensions.Logging;
 
@@ -16,6 +17,9 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly CancellationTokenSource _pollingCancellationToken = new();
+    
+    // heartbeat
+    private Timer _heartbeatTimer;
     private bool _handshake;
     private string _path;
 
@@ -30,8 +34,17 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }
 
-    public HandshakePacket? HandshakePacket { get; private set; }
     public string Name => "polling";
+    
+    public string Sid { get; private set; }
+
+    public string[] Upgrades { get; private set; }
+
+    public int PingInterval { get; private set; }
+
+    public int PingTimeout { get; private set; }
+
+    public int MaxPayload { get; private set; }
 
     public void Dispose()
     {
@@ -40,18 +53,15 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _pollingCancellationToken.Dispose();
     }
     
-    public async IAsyncEnumerable<Packet> PollAsync(
+    public async IAsyncEnumerable<Packet> PollAsync(int interval,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        // TODO: maybe interval value should be exposed to consumer.
-        var interval = Math.Abs(HandshakePacket!.PingInterval - HandshakePacket.PingTimeout);
-        
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(interval));
-        using var cts = CancellationTokenSource
+        using var pollingCancellationToken = CancellationTokenSource
             .CreateLinkedTokenSource(cancellationToken, _pollingCancellationToken.Token);
         
-        while (!cts.IsCancellationRequested &&
-               await timer.WaitForNextTickAsync(cts.Token))
+        while (!pollingCancellationToken.IsCancellationRequested &&
+               await timer.WaitForNextTickAsync(pollingCancellationToken.Token))
         {
             var data = await GetAsync(cancellationToken);
             var packets = SplitPackets(data);
@@ -60,10 +70,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 // Handle heartbeat packet and yield the other packet types to the caller
                 if (packet.Span[0] == (byte)PacketType.Ping)
                 {
-#pragma warning disable CS4014
-                    SendHeartbeat(cts.Token);
-#pragma warning restore CS4014
-                    _logger.LogDebug("Heartbeat completed");
+                    _logger.LogDebug("Heartbeat received");
                     continue;
                 }
 
@@ -86,13 +93,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 yield return new Packet(format, type, content);
             }
         }
-    }
-    
-    private void SendHeartbeat(CancellationToken cancellationToken)
-    {
-#pragma warning disable CS4014
-        SendAsync(PacketFormat.PlainText, new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
-#pragma warning restore CS4014
     }
     
     private IReadOnlyCollection<ReadOnlyMemory<byte>> SplitPackets(byte[] data)
@@ -150,7 +150,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             throw new Exception("Transport is not connected");
         }
 
-        if (packet.Length > HandshakePacket!.MaxPayload)
+        if (packet.Length > MaxPayload)
         {
             throw new Exception("Max packet payload exceeded");
         }
@@ -212,15 +212,50 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             throw new Exception("Unexpected packet type");
         }
 
-        HandshakePacket = JsonSerializer
-            .Deserialize<HandshakePacket>(data.AsSpan(1));
-        if (HandshakePacket is null)
-        {
-            throw new Exception("Invalid handshake packet");
-        }
+        var handshake = JsonSerializer
+            .Deserialize<HandshakePacket>(data[1..])!;
 
-        _path += $"&sid={HandshakePacket.Sid}";
+        Sid = handshake.Sid;
+        MaxPayload = handshake.MaxPayload;
+        PingInterval = handshake.PingInterval;
+        PingTimeout = handshake.PingTimeout;
+        Upgrades = handshake.Upgrades;
+        
+        _path += $"&sid={Sid}";
         _handshake = true;
         _logger.LogDebug("Handshake completed successfully");
+
+#pragma warning disable CS4014
+        HeartbeatAsync(PingInterval).ConfigureAwait(false);
+#pragma warning restore CS4014
+    }
+    
+    private async Task HeartbeatAsync(int interval)
+    {
+        using var heartbeatTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(interval));
+        while (!_pollingCancellationToken.IsCancellationRequested && await heartbeatTimer.WaitForNextTickAsync(
+                   _pollingCancellationToken.Token))
+        {
+            await SendAsync(PacketFormat.PlainText, new[] { (byte)PacketType.Pong }, CancellationToken.None);
+            _logger.LogDebug("Heartbeat sent");
+        }
+    }
+    
+    private class HandshakePacket
+    {
+        [JsonPropertyName("sid")]
+        public required string Sid { get; set; }
+
+        [JsonPropertyName("upgrades")]
+        public required string[] Upgrades { get; set; }
+
+        [JsonPropertyName("pingInterval")]
+        public required int PingInterval { get; set; }
+
+        [JsonPropertyName("pingTimeout")]
+        public required int PingTimeout { get; set; }
+
+        [JsonPropertyName("maxPayload")]
+        public required int MaxPayload { get; set; }
     }
 }

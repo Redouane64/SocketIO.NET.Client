@@ -165,9 +165,10 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 // Binary message format example:
                 // bAQIDBA==
                 // 
-                var builder = new StringBuilder();
+                var base64 = Convert.ToBase64String(packet.Span);
+                var builder = new StringBuilder(base64.Length + 1);
                 builder.Append('b');
-                builder.Append(Convert.ToBase64String(packet.Span));
+                builder.Append(base64);
                 
                 content = new ReadOnlyMemoryContent(Encoding.UTF8.GetBytes(builder.ToString()));
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");

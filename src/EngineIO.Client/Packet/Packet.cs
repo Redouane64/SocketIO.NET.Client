@@ -5,7 +5,7 @@ namespace EngineIO.Client.Packets;
 /// <summary>
 /// Represent a message packet.
 /// </summary>
-public struct Packet
+public readonly struct Packet
 {
     public Packet(PacketFormat format, PacketType type, ReadOnlyMemory<byte> content)
     {

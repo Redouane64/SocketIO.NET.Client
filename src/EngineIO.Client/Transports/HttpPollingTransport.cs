@@ -50,11 +50,12 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         while (!cts.IsCancellationRequested &&
                await timer.WaitForNextTickAsync(cts.Token))
         {
-            var packets = await SplitPackets(cts.Token);
+            var data = await GetAsync(cancellationToken);
+            var packets = SplitPackets(data);
             foreach (var packet in packets)
             {
                 // Handle heartbeat packet and yield the other packet types to the caller
-                if (packet[0] == (byte)PacketType.Ping)
+                if (packet.Span[0] == (byte)PacketType.Ping)
                 {
 #pragma warning disable CS4014
                     SendHeartbeat(cts.Token);
@@ -66,16 +67,16 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 PacketFormat format;
                 ReadOnlyMemory<byte> content;
                 PacketType type = PacketType.Message;
-                if (packet[0] == 98)
+                if (packet.Span[0] == 98)
                 {
                     format = PacketFormat.Binary;
                     // skip 'b' from base64 message
-                    content = new ReadOnlyMemory<byte>(packet, 1, packet.Length - 1);
+                    content = packet[1..];
                 }
                 else
                 {
                     format = PacketFormat.PlainText;
-                    content = new ReadOnlyMemory<byte>(packet);
+                    content = packet;
                     type = (PacketType)content.Span[0];
                 }
                 
@@ -90,26 +91,18 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         SendAsync(PacketFormat.PlainText, new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
 #pragma warning restore CS4014
     }
-
-    /// <summary>
-    /// Split concatenated packets into a collection of packets.
-    /// <a href="https://github.com/socketio/engine.io-protocol?tab=readme-ov-file#http-long-polling-1">Packet encoding</a>
-    /// </summary>
-    /// <param name="cancellationToken"></param>
-    /// <returns>Packets</returns>
-    private async Task<IReadOnlyCollection<byte[]>> SplitPackets(CancellationToken cancellationToken = default)
+    
+    private IReadOnlyCollection<ReadOnlyMemory<byte>> SplitPackets(byte[] data)
     {
-        var data = await GetAsync(cancellationToken);
-
-        var packets = new Collection<byte[]>();
-        var separator = 0x1E;
+        var packets = new Collection<ReadOnlyMemory<byte>>();
+        short separator = 0x1E;
 
         var start = 0;
         for (var index = start; index < data.Length; index++)
         {
             if (data[index] == separator)
             {
-                var packet = data.AsSpan(start..index).ToArray();
+                var packet = new ReadOnlyMemory<byte>(data, start, index - start);
                 packets.Add(packet);
                 start = index + 1;
             }
@@ -117,7 +110,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
         if (start < data.Length)
         {
-            var packet = data.AsSpan(start).ToArray();
+            var packet = new ReadOnlyMemory<byte>(data, start, data.Length - start);
             packets.Add(packet);
         }
 

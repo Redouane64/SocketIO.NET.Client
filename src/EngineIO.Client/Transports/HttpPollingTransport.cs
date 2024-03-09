@@ -142,7 +142,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         return data;
     }
 
-    public async Task SendAsync(PacketFormat format, byte[] packet,
+    public async Task SendAsync(PacketFormat format, ReadOnlyMemory<byte> packet,
         CancellationToken cancellationToken = default)
     {
         if (!_handshake)
@@ -167,7 +167,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 // 
                 var builder = new StringBuilder();
                 builder.Append('b');
-                builder.Append(Convert.ToBase64String(packet));
+                builder.Append(Convert.ToBase64String(packet.Span));
                 
                 content = new ReadOnlyMemoryContent(Encoding.UTF8.GetBytes(builder.ToString()));
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
@@ -205,9 +205,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
 
         var data = await GetAsync(cancellationToken);
-        var handshakePacket = (PacketType)data[0];
-
-        if (handshakePacket != PacketType.Open)
+        if (data[0] != (byte)PacketType.Open)
         {
             throw new Exception("Unexpected packet type");
         }

@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text;
-using EngineIO.Client.Packet;
+using EngineIO.Client.Packets;
 using EngineIO.Client.Transport;
 using Microsoft.Extensions.Logging;
 
@@ -13,9 +13,7 @@ public sealed class Engine : IDisposable
     private readonly ILoggerFactory _loggerFactory;
 
     // storage for streamable messages
-    private readonly ConcurrentQueue<byte[]> _streamablePackets = new();
-
-    private readonly string _uri;
+    private readonly ConcurrentQueue<Packet> _streamablePackets = new();
 
     // Client state variables
     private readonly ClientOptions _clientOptions = new();
@@ -23,6 +21,8 @@ public sealed class Engine : IDisposable
     private bool _connected;
     private HttpPollingTransport _httpTransport;
     private WebSocketTransport? _wsTransport;
+    private ITransport _currentTransport;
+    
     private CancellationTokenSource _pollingCancellationTokenSource = new();
 
 #pragma warning disable CS8618
@@ -33,9 +33,7 @@ public sealed class Engine : IDisposable
         _logger = loggerFactory.CreateLogger<Engine>();
         configure(_clientOptions);
     }
-
-    public ITransport Transport { get; private set; }
-
+    
     public void Dispose()
     {
         _pollingCancellationTokenSource.Dispose();
@@ -45,10 +43,12 @@ public sealed class Engine : IDisposable
 
     public async Task ConnectAsync()
     {
-        Transport = _httpTransport = new HttpPollingTransport(_uri, _loggerFactory.CreateLogger<HttpPollingTransport>());
+        _currentTransport = _httpTransport = new HttpPollingTransport(
+            _clientOptions.Uri, _loggerFactory.CreateLogger<HttpPollingTransport>());
+        
         await _httpTransport.Handshake(_pollingCancellationTokenSource.Token);
 
-        if (_autoUpgrade && _httpTransport.HandshakePacket!.Upgrades.Contains("websocket"))
+        if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades.Contains("websocket"))
         {
             _logger.LogDebug("Upgrading to Websocket transport");
             await Upgrade();
@@ -65,37 +65,36 @@ public sealed class Engine : IDisposable
     
     private void StartPolling()
     {
-        StartTransportPolling(Transport).ConfigureAwait(false);
+        StartTransportPolling(_currentTransport).ConfigureAwait(false);
     }
 
     private async Task StartTransportPolling(ITransport transport)
     {
         await foreach (var packet in transport.PollAsync(_clientOptions.PollingInterval, _pollingCancellationTokenSource.Token))
         {
-            if (packet[0] == (byte)PacketType.Close)
+            if (packet.Type == PacketType.Close)
             {
-                _logger.LogDebug("Client dropped by remote server");
-                await _pollingCancellationTokenSource.CancelAsync().ConfigureAwait(false);
-                await DisconnectAsync();
+                _logger.LogDebug("Connection dropped by remote server");
+                await DisconnectAsync().ConfigureAwait(false);
                 break;
             }
 
-            if (packet[0] == (byte)PacketType.Message)
+            if (packet.Type == PacketType.Message)
             {
-                // enqueue message payload
-                _streamablePackets.Enqueue(packet.AsSpan(1).ToArray());
+                _streamablePackets.Enqueue(packet);
             }
         }
     }
-
+    
     private async Task Upgrade()
     {
         await _pollingCancellationTokenSource.CancelAsync();
         _pollingCancellationTokenSource.Dispose();
 
-        Transport = _wsTransport =
-            new WebSocketTransport(_uri, _httpTransport.HandshakePacket!,
+        _currentTransport = _wsTransport =
+            new WebSocketTransport(_clientOptions.Uri, _httpTransport.Sid,
                 _loggerFactory.CreateLogger<WebSocketTransport>());
+        
         await _wsTransport.Handshake();
     }
 
@@ -107,11 +106,11 @@ public sealed class Engine : IDisposable
         }
 
         await _pollingCancellationTokenSource.CancelAsync();
-        await Transport.Disconnect();
+        await _currentTransport.Disconnect();
         _connected = false;
     }
 
-    public async IAsyncEnumerable<byte[]> Stream(TimeSpan interval,
+    public async IAsyncEnumerable<Packet> Stream(TimeSpan interval,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         using var timer = new PeriodicTimer(interval);
@@ -133,7 +132,7 @@ public sealed class Engine : IDisposable
     public async Task SendAsync(string text, CancellationToken cancellationToken = default)
     {
         var packet = Encoding.UTF8.GetBytes(text);
-        await Transport.SendAsync(PacketFormat.PlainText, packet, cancellationToken);
+        await _currentTransport.SendAsync(PacketFormat.PlainText, packet, cancellationToken);
     }
 
     /// <summary>
@@ -141,9 +140,9 @@ public sealed class Engine : IDisposable
     /// </summary>
     /// <param name="binary">Binary data</param>
     /// <param name="cancellationToken"></param>
-    public async Task SendAsync(byte[] binary, CancellationToken cancellationToken = default)
+    public async Task SendAsync(ReadOnlyMemory<byte> binary, CancellationToken cancellationToken = default)
     {
-        await Transport.SendAsync(PacketFormat.Binary, binary, cancellationToken);
+        await _currentTransport.SendAsync(PacketFormat.Binary, binary, cancellationToken);
     }
 
 }

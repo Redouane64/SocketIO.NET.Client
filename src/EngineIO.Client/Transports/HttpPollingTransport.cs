@@ -23,6 +23,9 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     {
         _logger = logger;
         _httpClient = new HttpClient();
+
+        _httpClient.DefaultRequestHeaders.ConnectionClose = false;
+        
         _httpClient.BaseAddress = new Uri(baseAddress);
         _path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }

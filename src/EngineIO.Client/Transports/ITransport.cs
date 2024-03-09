@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using EngineIO.Client.Packets;
 
 namespace EngineIO.Client.Transport;
@@ -22,8 +23,7 @@ public interface ITransport
     ///     Fetch raw packets from server.
     /// </summary>
     /// <returns>Packets as an array of Bytes.</returns>
-    Task<byte[]> GetAsync(
-        CancellationToken cancellationToken = default);
+    Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Send raw packets to server.

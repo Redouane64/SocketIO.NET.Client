@@ -1,6 +1,7 @@
+using System.Collections.ObjectModel;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
-using EngineIO.Client.Packet;
+using EngineIO.Client.Packets;
 using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client.Transport;
@@ -16,14 +17,13 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     private readonly CancellationTokenSource _pollingCancellationToken = new();
     private readonly Uri _uri;
+    private readonly string _sid;
+    
     private bool _handshake;
 
-    public WebSocketTransport(string baseAddress, HandshakePacket handshakePacket, ILogger<WebSocketTransport> logger)
+    public WebSocketTransport(string baseAddress, string sid, ILogger<WebSocketTransport> logger)
     {
-        if (handshakePacket.Sid is null)
-        {
-            throw new ArgumentException("Sid is missing");
-        }
+        _sid = sid ?? throw new ArgumentException("Sid is missing");
 
         if (baseAddress.StartsWith(Uri.UriSchemeHttp))
         {
@@ -35,16 +35,13 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             baseAddress = baseAddress.Replace("https://", "wss://");
         }
 
-        var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}&sid={handshakePacket.Sid}";
+        var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}&sid={sid}";
 
-        HandshakePacket = handshakePacket;
         _logger = logger;
-        
         _uri = new Uri(uri);
         _client = new ClientWebSocket();
     }
     
-    public HandshakePacket? HandshakePacket { get; }
     public string Name => "websocket";
 
     public void Dispose()
@@ -73,7 +70,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         // pong probe
         var pongProbePacket = await GetAsync(cancellationToken);
 
-        if (pongProbePacket[0] != (byte)PacketType.Pong)
+        if (pongProbePacket[0].Type != PacketType.Pong)
         {
             throw new Exception("Unexpected response from server");
         }
@@ -94,7 +91,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _client.Abort();
     }
 
-    public async Task<byte[]> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)
     {
         var buffer = new byte[16];
         var receivedCount = 0;
@@ -129,10 +126,15 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             _receiveSemaphore.Release();
         }
 
-        return buffer.AsSpan(0, receivedCount).ToArray();
+        var packet = new ReadOnlyMemory<byte>(buffer);
+        var format = packet.Span[0] == 98 ? PacketFormat.Binary : PacketFormat.PlainText;
+        var type = format == PacketFormat.PlainText ? (PacketType)packet.Span[0] : PacketType.Message;
+        var content = packet[1..];
+
+        return new Collection<Packet> { new Packet(format, type, content) }.AsReadOnly();
     }
 
-    public async Task SendAsync(PacketFormat format, byte[] packet,
+    public async Task SendAsync(PacketFormat format, ReadOnlyMemory<byte> packet,
         CancellationToken cancellationToken = default)
     {
         if (_client.State == WebSocketState.Closed)
@@ -151,7 +153,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         }
     }
 
-    public async IAsyncEnumerable<byte[]> PollAsync(
+    public async IAsyncEnumerable<Packet> PollAsync(int interval,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         using var cts =
@@ -159,9 +161,8 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
         while (!cts.IsCancellationRequested)
         {
-            var packet = await GetAsync(cancellationToken);
-
-            if (packet[0] == (byte)PacketType.Ping)
+            var packets = await GetAsync(cancellationToken);
+            if (packets[0].Type == PacketType.Ping)
             {
                 _logger.LogDebug("Heartbeat received");
 #pragma warning disable CS4014 
@@ -169,8 +170,8 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 #pragma warning restore CS4014
                 continue;
             }
-
-            yield return packet;
+            
+            yield return packets[0];
         }
     }
 

@@ -63,61 +63,19 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         while (!pollingCancellationToken.IsCancellationRequested &&
                await timer.WaitForNextTickAsync(pollingCancellationToken.Token))
         {
-            var data = await GetAsync(cancellationToken);
-            var packets = SplitPackets(data);
+            var packets = await GetAsync(cancellationToken);
             foreach (var packet in packets)
             {
                 // Handle heartbeat packet and yield the other packet types to the caller
-                if (packet.Span[0] == (byte)PacketType.Ping)
+                if (packet.Type == PacketType.Ping)
                 {
                     _logger.LogDebug("Heartbeat received");
                     continue;
                 }
 
-                PacketFormat format;
-                ReadOnlyMemory<byte> content;
-                PacketType type = PacketType.Message;
-                if (packet.Span[0] == 98)
-                {
-                    format = PacketFormat.Binary;
-                    // skip 'b' from base64 message
-                    content = packet[1..];
-                }
-                else
-                {
-                    format = PacketFormat.PlainText;
-                    content = packet;
-                    type = (PacketType)content.Span[0];
-                }
-                
-                yield return new Packet(format, type, content);
+                yield return packet;
             }
         }
-    }
-    
-    private IReadOnlyCollection<ReadOnlyMemory<byte>> SplitPackets(byte[] data)
-    {
-        var packets = new Collection<ReadOnlyMemory<byte>>();
-        short separator = 0x1E;
-
-        var start = 0;
-        for (var index = start; index < data.Length; index++)
-        {
-            if (data[index] == separator)
-            {
-                var packet = new ReadOnlyMemory<byte>(data, start, index - start);
-                packets.Add(packet);
-                start = index + 1;
-            }
-        }
-
-        if (start < data.Length)
-        {
-            var packet = new ReadOnlyMemory<byte>(data, start, data.Length - start);
-            packets.Add(packet);
-        }
-
-        return packets;
     }
 
     public async Task Disconnect()
@@ -126,7 +84,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         await _pollingCancellationToken.CancelAsync();
     }
 
-    public async Task<byte[]> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)
     {
         var data = Array.Empty<byte>();
         try
@@ -139,7 +97,40 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             _semaphore.Release();
         }
 
-        return data;
+        return SplitPackets(data);
+
+        ReadOnlyCollection<Packet> SplitPackets(byte[] data)
+        {
+            var packets = new Collection<Packet>();
+            short separator = 0x1E;
+
+            var start = 0;
+            for (var index = start; index < data.Length; index++)
+            {
+                if (data[index] == separator)
+                {
+                    var packet = new ReadOnlyMemory<byte>(data, start, index - start);
+                    var format = packet.Span[0] == 98 ? PacketFormat.Binary : PacketFormat.PlainText;
+                    var type = format == PacketFormat.PlainText ? (PacketType)packet.Span[0] : PacketType.Message;
+                    var content = packet[1..];
+                    
+                    packets.Add(new Packet(format, type, content));
+                    start = index + 1;
+                }
+            }
+
+            if (start < data.Length)
+            {
+                var packet = new ReadOnlyMemory<byte>(data, start, data.Length - start);
+                var format = packet.Span[0] == 98 ? PacketFormat.Binary : PacketFormat.PlainText;
+                var type = format == PacketFormat.PlainText ? (PacketType)packet.Span[0] : PacketType.Message;
+                var content = packet[1..];
+                    
+                packets.Add(new Packet(format, type, content));
+            }
+
+            return packets.AsReadOnly();
+        }
     }
 
     public async Task SendAsync(PacketFormat format, ReadOnlyMemory<byte> packet,
@@ -206,13 +197,15 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
 
         var data = await GetAsync(cancellationToken);
-        if (data[0] != (byte)PacketType.Open)
+        var packet = data[0];
+        
+        if (packet.Type != PacketType.Open)
         {
             throw new Exception("Unexpected packet type");
         }
 
         var handshake = JsonSerializer
-            .Deserialize<HandshakePacket>(data[1..])!;
+            .Deserialize<HandshakePacket>(packet.Content.Span)!;
 
         Sid = handshake.Sid;
         MaxPayload = handshake.MaxPayload;

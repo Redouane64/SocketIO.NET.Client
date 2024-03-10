@@ -28,13 +28,12 @@ internal class Program
         {
             options.Uri = "http://127.0.0.1:9854";
             options.AutoUpgrade = false;
-            options.PollingInterval = 100;
         }, loggerFactory);
         await engine.ConnectAsync();
 
         var cts = new CancellationTokenSource();
 
-        var streaming = Task.Run(async () =>
+        Task.Run(async () =>
         {
             try
             {
@@ -51,7 +50,7 @@ internal class Program
             Console.WriteLine("Streaming completed");
         });
         
-        var transmitter = Task.Run(async () =>
+        Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
             while (await timer.WaitForNextTickAsync(cts.Token))
@@ -65,6 +64,5 @@ internal class Program
         await cts.CancelAsync();
         await engine.DisconnectAsync();
         
-        Task.WaitAll(streaming, transmitter);
     }
 }

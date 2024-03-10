@@ -10,7 +10,7 @@ const server = engine.attach(httpServer, {
     origin: '*'
   },
   pingInterval: 300,
-  pingTimeout: 600,
+  pingTimeout: 200,
   transports: ['polling', "websocket"],
   allowUpgrades: true,
 });

@@ -12,7 +12,7 @@ internal class Program
 {
     private static async Task Main(string[] args)
     {
-        var logger = LoggerFactory.Create(builder =>
+        var loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.AddSimpleConsole(o =>
             {
@@ -22,7 +22,14 @@ internal class Program
             }).SetMinimumLevel(LogLevel.Debug);
         });
 
-        using var engine = new Engine("http://127.0.0.1:9854", logger);
+        var logger = loggerFactory.CreateLogger<Program>();
+
+        using var engine = new Engine((options) =>
+        {
+            options.Uri = "http://127.0.0.1:9854";
+            options.AutoUpgrade = false;
+            options.PollingInterval = 100;
+        }, loggerFactory);
         await engine.ConnectAsync();
 
         var cts = new CancellationTokenSource();
@@ -33,22 +40,31 @@ internal class Program
             {
                 await foreach (var message in engine.Stream(TimeSpan.FromSeconds(1), cts.Token))
                 {
-                    Console.WriteLine("Server: {0}", Encoding.UTF8.GetString(message));
+                    logger.LogInformation("Server: {0}", message);
                 }
             }
             catch (Exception exception)
             {
                 // TODO:
+                logger.LogError(exception, "Error");
             }
             Console.WriteLine("Streaming completed");
-        }, cts.Token);
+        });
+        
+        var transmitter = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+            while (await timer.WaitForNextTickAsync(cts.Token))
+            {
+                await engine.SendAsync("Hello from client!!");
+            }
+        });
 
         Console.ReadKey();
-        
+
         await cts.CancelAsync();
-        Task.WaitAll(streaming);
-        
         await engine.DisconnectAsync();
         
+        Task.WaitAll(streaming, transmitter);
     }
 }

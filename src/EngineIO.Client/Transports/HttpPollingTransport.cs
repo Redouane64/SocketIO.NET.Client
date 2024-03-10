@@ -20,7 +20,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private bool _handshake;
     private string _path;
 
-    public HttpPollingTransport(string baseAddress, ILogger<HttpPollingTransport> logger)
+    public HttpPollingTransport(string baseAddress)
     {
         _httpClient = new HttpClient();
 

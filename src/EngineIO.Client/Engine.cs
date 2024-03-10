@@ -9,18 +9,16 @@ namespace EngineIO.Client;
 public sealed class Engine : IDisposable
 {
     private readonly ILogger<Engine> _logger;
-    private readonly ILoggerFactory _loggerFactory;
 
     // storage for streamable messages
     private readonly ConcurrentQueue<Packet> _streamablePackets = new();
-
-    // Client state variables
     private readonly ClientOptions _clientOptions = new();
     
     private bool _connected;
     private HttpPollingTransport _httpTransport;
     private WebSocketTransport? _wsTransport;
-    private ITransport _currentTransport;
+    // reference current active transport
+    private ITransport _transport;
     
     private CancellationTokenSource _pollingCancellationTokenSource = new();
 
@@ -28,7 +26,6 @@ public sealed class Engine : IDisposable
     public Engine(Action<ClientOptions> configure, ILoggerFactory loggerFactory)
 #pragma warning restore CS8618
     {
-        _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<Engine>();
         configure(_clientOptions);
     }
@@ -42,8 +39,7 @@ public sealed class Engine : IDisposable
 
     public async Task ConnectAsync()
     {
-        _currentTransport = _httpTransport = new HttpPollingTransport(
-            _clientOptions.Uri!, _loggerFactory.CreateLogger<HttpPollingTransport>());
+        _transport = _httpTransport = new HttpPollingTransport(_clientOptions.Uri!);
         
         await _httpTransport.Handshake(_pollingCancellationTokenSource.Token);
 
@@ -63,7 +59,7 @@ public sealed class Engine : IDisposable
     
     private async Task StartPolling()
     {
-        await foreach (var packet in _currentTransport.PollAsync(_pollingCancellationTokenSource.Token))
+        await foreach (var packet in _transport.PollAsync(_pollingCancellationTokenSource.Token))
         {
             if (packet.Type == PacketType.Message)
             {
@@ -76,11 +72,7 @@ public sealed class Engine : IDisposable
     {
         await _pollingCancellationTokenSource.CancelAsync();
         _pollingCancellationTokenSource.Dispose();
-
-        _currentTransport = _wsTransport =
-            new WebSocketTransport(_clientOptions.Uri!, _httpTransport.Sid!,
-                _loggerFactory.CreateLogger<WebSocketTransport>());
-        
+        _transport = _wsTransport = new WebSocketTransport(_clientOptions.Uri!, _httpTransport.Sid!);
         await _wsTransport.Handshake();
     }
 
@@ -92,7 +84,7 @@ public sealed class Engine : IDisposable
         }
 
         await _pollingCancellationTokenSource.CancelAsync();
-        await _currentTransport.Disconnect();
+        await _transport.Disconnect();
         _connected = false;
     }
 
@@ -118,7 +110,7 @@ public sealed class Engine : IDisposable
     public async Task SendAsync(string text, CancellationToken cancellationToken = default)
     {
         var packet = Packet.CreateMessagePacket(text);
-        await _currentTransport.SendAsync(packet, cancellationToken);
+        await _transport.SendAsync(packet, cancellationToken);
     }
 
     /// <summary>
@@ -129,7 +121,7 @@ public sealed class Engine : IDisposable
     public async Task SendAsync(ReadOnlyMemory<byte> binary, CancellationToken cancellationToken = default)
     {
         var packet = Packet.CreateBinaryPacket(binary);
-        await _currentTransport.SendAsync(packet, cancellationToken);
+        await _transport.SendAsync(packet, cancellationToken);
     }
 
 }

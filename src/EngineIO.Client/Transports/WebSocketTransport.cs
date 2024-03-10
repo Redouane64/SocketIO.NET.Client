@@ -2,14 +2,12 @@ using System.Collections.ObjectModel;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using EngineIO.Client.Packets;
-using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client.Transport;
 
 public sealed class WebSocketTransport : ITransport, IDisposable
 {
     private readonly ClientWebSocket _client;
-    private readonly ILogger<WebSocketTransport> _logger;
 
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _receiveSemaphore = new(1, 1);
@@ -21,7 +19,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     
     private bool _handshake;
 
-    public WebSocketTransport(string baseAddress, string sid, ILogger<WebSocketTransport> logger)
+    public WebSocketTransport(string baseAddress, string sid)
     {
         _sid = sid ?? throw new ArgumentException("Sid is missing");
 
@@ -37,7 +35,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
         var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}&sid={sid}";
 
-        _logger = logger;
         _uri = new Uri(uri);
         _client = new ClientWebSocket();
     }
@@ -63,7 +60,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
         // ping probe
         await SendAsync(Packet.PingProbePacket, cancellationToken);
-        _logger.LogDebug("Probe sent");
 
         // pong probe
         var pongProbePacket = await GetAsync(cancellationToken);
@@ -73,13 +69,10 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             throw new Exception("Unexpected response from server");
         }
 
-        _logger.LogDebug("Probe completed");
-
         // upgrade
         var upgradePacket = new byte[1] { (byte)PacketType.Upgrade };
         await SendAsync(Packet.UpgradePacket, cancellationToken);
 
-        _logger.LogDebug("Upgrade completed");
         _handshake = true;
     }
 
@@ -106,12 +99,10 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                 if (receiveResult.MessageType == WebSocketMessageType.Close)
                 {
                     await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-                    _logger.LogDebug("Connection closed by the remote server");
                     break;
                 }
 
                 receivedCount += receiveResult.Count;
-
                 if (receiveResult.Count > receivedCount - buffer.Length)
                 {
                     Array.Resize(ref buffer, buffer.Length + receivedCount);
@@ -164,9 +155,8 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             var packets = await GetAsync(cancellationToken);
             if (packets[0].Type == PacketType.Ping)
             {
-                _logger.LogDebug("Heartbeat received");
 #pragma warning disable CS4014 
-                SendHeartbeat(cancellationToken);
+                SendAsync(Packet.PongPacket, cancellationToken).ConfigureAwait(false);
 #pragma warning restore CS4014
                 continue;
             }
@@ -174,12 +164,4 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             yield return packets[0];
         }
     }
-
-    private void SendHeartbeat(CancellationToken cancellationToken)
-    {
-#pragma warning disable CS4014
-        SendAsync(Packet.PongPacket, cancellationToken).ConfigureAwait(false);
-#pragma warning restore CS4014
-    }
-
 }

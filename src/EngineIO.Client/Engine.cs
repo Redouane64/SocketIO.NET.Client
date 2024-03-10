@@ -72,13 +72,6 @@ public sealed class Engine : IDisposable
     {
         await foreach (var packet in transport.PollAsync(_clientOptions.PollingInterval, _pollingCancellationTokenSource.Token))
         {
-            if (packet.Type == PacketType.Close)
-            {
-                _logger.LogDebug("Connection dropped by remote server");
-                await DisconnectAsync().ConfigureAwait(false);
-                break;
-            }
-
             if (packet.Type == PacketType.Message)
             {
                 _streamablePackets.Enqueue(packet);

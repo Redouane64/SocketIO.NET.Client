@@ -70,6 +70,14 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                     _logger.LogDebug("Heartbeat received");
                     continue;
                 }
+                
+                if (packet.Type == PacketType.Close)
+                {
+                    _logger.LogDebug("Connection dropped by remote server");
+                    await _pollingCancellationToken.CancelAsync();
+                    _handshake = false;
+                    break;
+                }
 
                 yield return packet;
             }

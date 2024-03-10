@@ -11,6 +11,7 @@ Socket.IO .NET Client is an experimental project to implement Socket.IO protocol
 - [ ] Implement connection and polling retry
 - [ ] Implement send packet buffering when send fails 
 - [x] Implement basic Websocket transport
+- [ ] Implement transport fallback mechanism
 - [ ] Add tests
 
 - **Socket.IO Client**

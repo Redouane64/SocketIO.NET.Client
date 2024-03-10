@@ -44,11 +44,11 @@ public sealed class Engine : IDisposable
     public async Task ConnectAsync()
     {
         _currentTransport = _httpTransport = new HttpPollingTransport(
-            _clientOptions.Uri, _loggerFactory.CreateLogger<HttpPollingTransport>());
+            _clientOptions.Uri!, _loggerFactory.CreateLogger<HttpPollingTransport>());
         
         await _httpTransport.Handshake(_pollingCancellationTokenSource.Token);
 
-        if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades.Contains("websocket"))
+        if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades!.Contains("websocket"))
         {
             _logger.LogDebug("Upgrading to Websocket transport");
             await Upgrade();
@@ -92,7 +92,7 @@ public sealed class Engine : IDisposable
         _pollingCancellationTokenSource.Dispose();
 
         _currentTransport = _wsTransport =
-            new WebSocketTransport(_clientOptions.Uri, _httpTransport.Sid,
+            new WebSocketTransport(_clientOptions.Uri!, _httpTransport.Sid!,
                 _loggerFactory.CreateLogger<WebSocketTransport>());
         
         await _wsTransport.Handshake();
@@ -131,8 +131,8 @@ public sealed class Engine : IDisposable
     /// <param name="cancellationToken"></param>
     public async Task SendAsync(string text, CancellationToken cancellationToken = default)
     {
-        var packet = Encoding.UTF8.GetBytes(text);
-        await _currentTransport.SendAsync(PacketFormat.PlainText, packet, cancellationToken);
+        var packet = Packet.CreateMessagePacket(text);
+        await _currentTransport.SendAsync(packet, cancellationToken);
     }
 
     /// <summary>
@@ -142,7 +142,8 @@ public sealed class Engine : IDisposable
     /// <param name="cancellationToken"></param>
     public async Task SendAsync(ReadOnlyMemory<byte> binary, CancellationToken cancellationToken = default)
     {
-        await _currentTransport.SendAsync(PacketFormat.Binary, binary, cancellationToken);
+        var packet = Packet.CreateBinaryPacket(binary);
+        await _currentTransport.SendAsync(packet, cancellationToken);
     }
 
 }

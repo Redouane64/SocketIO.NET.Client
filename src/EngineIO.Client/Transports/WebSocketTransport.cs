@@ -62,9 +62,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         await _client.ConnectAsync(_uri, cancellationToken);
 
         // ping probe
-        var pingProbePacket = new[]
-            { (byte)PacketType.Ping, (byte)'p', (byte)'r', (byte)'o', (byte)'b', (byte)'e' };
-        await SendAsync(PacketFormat.PlainText, pingProbePacket, cancellationToken);
+        await SendAsync(Packet.PingProbePacket, cancellationToken);
         _logger.LogDebug("Probe sent");
 
         // pong probe
@@ -79,7 +77,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
         // upgrade
         var upgradePacket = new byte[1] { (byte)PacketType.Upgrade };
-        await SendAsync(PacketFormat.PlainText, upgradePacket, cancellationToken);
+        await SendAsync(Packet.UpgradePacket, cancellationToken);
 
         _logger.LogDebug("Upgrade completed");
         _handshake = true;
@@ -134,7 +132,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         return new Collection<Packet> { new Packet(format, type, content) }.AsReadOnly();
     }
 
-    public async Task SendAsync(PacketFormat format, ReadOnlyMemory<byte> packet,
+    public async Task SendAsync(Packet packet,
         CancellationToken cancellationToken = default)
     {
         if (_client.State == WebSocketState.Closed)
@@ -145,7 +143,9 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         try
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);
-            await _client.SendAsync(packet, WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage, cancellationToken);
+            // TODO: if packet length exceeds MaxPayload, it should be sent with multiple Send calls.
+            await _client.SendAsync(packet.ToPayload(), 
+                WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage, cancellationToken);
         }
         finally
         {
@@ -178,7 +178,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     private void SendHeartbeat(CancellationToken cancellationToken)
     {
 #pragma warning disable CS4014
-        SendAsync(PacketFormat.PlainText, new[] { (byte)PacketType.Pong }, cancellationToken).ConfigureAwait(false);
+        SendAsync(Packet.PongPacket, cancellationToken).ConfigureAwait(false);
 #pragma warning restore CS4014
     }
 

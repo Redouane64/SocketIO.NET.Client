@@ -12,22 +12,16 @@ namespace EngineIO.Client.Transport;
 public sealed class HttpPollingTransport : ITransport, IDisposable
 {
     private readonly HttpClient _httpClient;
-    private readonly ILogger<HttpPollingTransport> _logger;
 
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly CancellationTokenSource _pollingCancellationToken = new();
-
-    private readonly ManualResetEventSlim _heartbeatSync = new ManualResetEventSlim(false);
-    private Timer _heartbeatTimeoutTimer;
-    private bool _hasPingPonged = false;
     
     private bool _handshake;
     private string _path;
 
     public HttpPollingTransport(string baseAddress, ILogger<HttpPollingTransport> logger)
     {
-        _logger = logger;
         _httpClient = new HttpClient();
 
         _httpClient.Timeout = Timeout.InfiniteTimeSpan;
@@ -59,12 +53,9 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async IAsyncEnumerable<Packet> PollAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(PingInterval));
         using var pollingCancellationToken = CancellationTokenSource
             .CreateLinkedTokenSource(cancellationToken, _pollingCancellationToken.Token);
-        
-        while (!pollingCancellationToken.IsCancellationRequested &&
-               await timer.WaitForNextTickAsync(pollingCancellationToken.Token))
+        while (!pollingCancellationToken.IsCancellationRequested)
         {
             var packets = await GetAsync(cancellationToken);
             foreach (var packet in packets)
@@ -72,15 +63,14 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 // Handle heartbeat packet and yield the other packet types to the caller
                 if (packet.Type == PacketType.Ping)
                 {
-                    // set current heartbeat as incomplete
-                    _hasPingPonged = false;
-                    _heartbeatSync.Set();
+#pragma warning disable CS4014 
+                    SendHeartbeat().ConfigureAwait(false);
+#pragma warning restore CS4014 
                     continue;
                 }
                 
                 if (packet.Type == PacketType.Close)
                 {
-                    _logger.LogDebug("Connection dropped by remote server");
                     await _pollingCancellationToken.CancelAsync();
                     _handshake = false;
                     break;
@@ -173,10 +163,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 throw new Exception("Unexpected response from remote server");
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error while sending packet");
-        }
         finally
         {
             _semaphore.Release();
@@ -210,37 +196,11 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         
         _path += $"&sid={Sid}";
         _handshake = true;
-        _logger.LogDebug("Handshake completed successfully");
-
-        // start heartbeat mechanism
-#pragma warning disable CS4014
-        Heartbeat(PingInterval).ConfigureAwait(false);
-#pragma warning restore CS4014
-
-        var timeout = TimeSpan.FromMilliseconds(PingInterval + PingTimeout);
-        _heartbeatTimeoutTimer = new Timer(HeartbeatTimeoutChecker, null, timeout, timeout);
     }
 
-    private void HeartbeatTimeoutChecker(object? state)
+    private async Task SendHeartbeat()
     {
-        if (!_hasPingPonged)
-        {
-            Disconnect().ConfigureAwait(false);
-        }
-    }
-
-    private async Task Heartbeat(int interval)
-    {
-        using var heartbeatTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(interval));
-        while (!_pollingCancellationToken.IsCancellationRequested && await heartbeatTimer.WaitForNextTickAsync(
-                   _pollingCancellationToken.Token))
-        {
-            _heartbeatSync.Wait();
-            await SendAsync(Packet.PongPacket, _pollingCancellationToken.Token);
-            _heartbeatSync.Reset();
-            // set current heartbeat as complete
-            _hasPingPonged = true;
-        }
+        await SendAsync(Packet.PongPacket, _pollingCancellationToken.Token);
     }
     
     private class HandshakePacket

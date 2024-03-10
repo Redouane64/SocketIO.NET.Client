@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
-using System.Text;
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transport;
 using Microsoft.Extensions.Logging;
@@ -57,20 +56,14 @@ public sealed class Engine : IDisposable
 
         _connected = true;
         _logger.LogDebug("Client connected");
-
 #pragma warning disable CS4014
-        Task.Run(StartPolling, _pollingCancellationTokenSource.Token);
+        Task.Run(StartPolling, _pollingCancellationTokenSource.Token).ConfigureAwait(false);
 #pragma warning restore CS4014
     }
     
-    private void StartPolling()
+    private async Task StartPolling()
     {
-        StartTransportPolling(_currentTransport).ConfigureAwait(false);
-    }
-
-    private async Task StartTransportPolling(ITransport transport)
-    {
-        await foreach (var packet in transport.PollAsync(_pollingCancellationTokenSource.Token))
+        await foreach (var packet in _currentTransport.PollAsync(_pollingCancellationTokenSource.Token))
         {
             if (packet.Type == PacketType.Message)
             {
@@ -78,7 +71,7 @@ public sealed class Engine : IDisposable
             }
         }
     }
-    
+
     private async Task Upgrade()
     {
         await _pollingCancellationTokenSource.CancelAsync();

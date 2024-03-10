@@ -9,8 +9,8 @@ const server = engine.attach(httpServer, {
   cors: {
     origin: '*'
   },
-  pingInterval: 10000,
-  pingTimeout: 20000,
+  pingInterval: 300,
+  pingTimeout: 600,
   transports: ['polling', "websocket"],
   allowUpgrades: true,
 });
@@ -35,11 +35,11 @@ server.on('connection', socket => {
     socket.send(data);
   });
   
-  /*
   setInterval(() => {
     socket.send("Hello!!!");
-  }, 10000)
+  }, 5000)
 
+  /*
   setTimeout(() => {
     socket.close();
   }, 15000)

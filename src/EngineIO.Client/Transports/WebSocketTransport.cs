@@ -153,7 +153,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         }
     }
 
-    public async IAsyncEnumerable<Packet> PollAsync(int interval,
+    public async IAsyncEnumerable<Packet> PollAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         using var cts =

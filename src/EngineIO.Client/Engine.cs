@@ -70,7 +70,7 @@ public sealed class Engine : IDisposable
 
     private async Task StartTransportPolling(ITransport transport)
     {
-        await foreach (var packet in transport.PollAsync(_clientOptions.PollingInterval, _pollingCancellationTokenSource.Token))
+        await foreach (var packet in transport.PollAsync(_pollingCancellationTokenSource.Token))
         {
             if (packet.Type == PacketType.Message)
             {

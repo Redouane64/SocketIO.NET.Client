@@ -64,7 +64,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 if (packet.Type == PacketType.Ping)
                 {
 #pragma warning disable CS4014 
-                    SendHeartbeat().ConfigureAwait(false);
+                    SendAsync(Packet.PongPacket, _pollingCancellationToken.Token).ConfigureAwait(false);
 #pragma warning restore CS4014 
                     continue;
                 }
@@ -196,11 +196,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         
         _path += $"&sid={Sid}";
         _handshake = true;
-    }
-
-    private async Task SendHeartbeat()
-    {
-        await SendAsync(Packet.PongPacket, _pollingCancellationToken.Token);
     }
     
     private class HandshakePacket

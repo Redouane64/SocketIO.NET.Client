@@ -61,7 +61,7 @@ public readonly struct Packet
     /// <summary>
     /// Represents packet type.
     /// </summary>
-    public PacketType? Type { get; }
+    public PacketType Type { get; }
 
     /// <summary>
     /// Indicate content format stored in the packet.
@@ -72,21 +72,4 @@ public readonly struct Packet
     /// Packet body excluding packet type.
     /// </summary>
     public ReadOnlyMemory<byte> Body { get; }
-
-    public ReadOnlyMemory<byte> ToPayload()
-    {
-        var payload = new byte[1 + Body.Length];
-        payload[0] = Format == PacketFormat.Binary ? (byte)'b' : (byte)Type!;
-        for (int i = 1; i <= Body.Length; i++)
-        {
-            payload[i] = Body.Span[i - 1];
-        }
-
-        return payload;
-    }
-
-    public override string ToString()
-    {
-        return Encoding.UTF8.GetString(Body.Span);
-    }
 }

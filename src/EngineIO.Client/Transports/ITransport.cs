@@ -30,8 +30,7 @@ public interface ITransport
     /// </summary>
     /// <param name="packet">Packets encoded as Bytes</param>
     /// <param name="cancellationToken"></param>
-    Task SendAsync(Packet packet,
-        CancellationToken cancellationToken = default);
+    Task SendAsync(Packet packet, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Start polling server periodically and stream packets back to the caller.

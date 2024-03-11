@@ -142,17 +142,13 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
             if (packet.Format == PacketFormat.Binary)
             {
-                var packetBodyBase64 = Convert.ToBase64String(packet.Body.Span);
-                var builder = new StringBuilder(packetBodyBase64.Length + 1);
-                builder.Append('b');
-                builder.Append(packetBodyBase64);
-                
-                content = new ReadOnlyMemoryContent(Encoding.UTF8.GetBytes(builder.ToString()));
+                var data = packet.ToBinaryPacket(new Base64Encoder());
+                content = new ReadOnlyMemoryContent(data);
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
             }
             else
             {
-                content = new ReadOnlyMemoryContent(packet.ToPayload());
+                content = new ReadOnlyMemoryContent(packet.ToPlaintextPacket());
                 content.Headers.ContentType = new MediaTypeHeaderValue("text/plain", "utf-8");
             }
             

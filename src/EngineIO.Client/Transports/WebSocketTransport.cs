@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Net.WebSockets;
-using System.Runtime.CompilerServices;
 using EngineIO.Client.Packets;
 
 namespace EngineIO.Client.Transport;
@@ -141,27 +140,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         finally
         {
             _sendSemaphore.Release();
-        }
-    }
-
-    public async IAsyncEnumerable<Packet> PollAsync(
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        using var cts =
-            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _pollingCancellationToken.Token);
-
-        while (!cts.IsCancellationRequested)
-        {
-            var packets = await GetAsync(cancellationToken);
-            if (packets[0].Type == PacketType.Ping)
-            {
-#pragma warning disable CS4014 
-                SendAsync(Packet.PongPacket, cancellationToken).ConfigureAwait(false);
-#pragma warning restore CS4014
-                continue;
-            }
-            
-            yield return packets[0];
         }
     }
 }

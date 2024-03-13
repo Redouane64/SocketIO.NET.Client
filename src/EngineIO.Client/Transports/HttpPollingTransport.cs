@@ -1,11 +1,8 @@
 ﻿using System.Collections.ObjectModel;
 using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using EngineIO.Client.Packets;
-using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client.Transport;
 
@@ -50,37 +47,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _pollingCancellationToken.Dispose();
     }
     
-    public async IAsyncEnumerable<Packet> PollAsync(
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        using var pollingCancellationToken = CancellationTokenSource
-            .CreateLinkedTokenSource(cancellationToken, _pollingCancellationToken.Token);
-        while (!pollingCancellationToken.IsCancellationRequested)
-        {
-            var packets = await GetAsync(cancellationToken);
-            foreach (var packet in packets)
-            {
-                // Handle heartbeat packet and yield the other packet types to the caller
-                if (packet.Type == PacketType.Ping)
-                {
-#pragma warning disable CS4014 
-                    SendAsync(Packet.PongPacket, _pollingCancellationToken.Token).ConfigureAwait(false);
-#pragma warning restore CS4014 
-                    continue;
-                }
-                
-                if (packet.Type == PacketType.Close)
-                {
-                    await _pollingCancellationToken.CancelAsync();
-                    _handshake = false;
-                    break;
-                }
-
-                yield return packet;
-            }
-        }
-    }
-
     public async Task Disconnect()
     {
         await SendAsync(Packet.ClosePacket);

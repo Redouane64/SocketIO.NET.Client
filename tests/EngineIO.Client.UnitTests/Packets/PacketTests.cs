@@ -1,5 +1,6 @@
 using System.Text;
 using EngineIO.Client.Packets;
+using EngineIO.Client.Transport;
 
 namespace EngineIO.Client.UnitTests.Packets;
 
@@ -12,7 +13,7 @@ public class PacketTests
             PacketFormat.PlainText,
             PacketType.Message,
             new[] { (byte)'H', (byte)'i' })
-            .ToPayload();
+            .ToPlaintextPacket();
         
         Assert.Equal((byte)PacketType.Message, packet.Span[0]);
         Assert.Equal((byte)'H', packet.Span[1]);
@@ -28,10 +29,12 @@ public class PacketTests
                 PacketFormat.Binary,
                 PacketType.Message,
                 new[] { (byte)'H', (byte)'i' })
-            .ToPayload();
+            .ToBinaryPacket(new Base64Encoder());
         
         Assert.Equal((byte)'b', packet.Span[0]);
-        Assert.Equal((byte)'H', packet.Span[1]);
-        Assert.Equal((byte)'i', packet.Span[2]);
+        Assert.Equal((byte)base64[0], packet.Span[1]);
+        Assert.Equal((byte)base64[1], packet.Span[2]);
+        Assert.Equal((byte)base64[2], packet.Span[3]);
+        Assert.Equal((byte)base64[3], packet.Span[4]);
     }
 }

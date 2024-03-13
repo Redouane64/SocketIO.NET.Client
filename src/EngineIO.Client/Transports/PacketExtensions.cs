@@ -3,7 +3,7 @@ using EngineIO.Client.Packets;
 
 namespace EngineIO.Client.Transport;
 
-internal static class PacketExtensions
+public static class PacketExtensions
 {
     /// <summary>
     /// Convert message packet to wire packet representation.

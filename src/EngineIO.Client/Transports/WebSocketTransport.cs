@@ -134,8 +134,17 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);
             // TODO: if packet length exceeds MaxPayload, it should be sent with multiple Send calls.
-            await _client.SendAsync(packet.ToPayload(), 
-                WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage, cancellationToken);
+
+            ReadOnlyMemory<byte> data;
+            if (packet.Format == PacketFormat.Binary)
+            {
+                data = packet.ToBinaryPacket(new Base64Encoder());
+            }
+            else
+            {
+                data = packet.ToPlaintextPacket();
+            }
+            await _client.SendAsync(data, WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage, cancellationToken);
         }
         finally
         {

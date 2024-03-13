@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EngineIO.Client;
@@ -28,27 +27,10 @@ internal class Program
         {
             options.Uri = "http://127.0.0.1:9854";
             options.AutoUpgrade = false;
-        }, loggerFactory);
+        });
         await engine.ConnectAsync();
 
         var cts = new CancellationTokenSource();
-
-        Task.Run(async () =>
-        {
-            try
-            {
-                await foreach (var message in engine.Stream(TimeSpan.FromSeconds(1), cts.Token))
-                {
-                    logger.LogInformation("Server: {0}", message);
-                }
-            }
-            catch (Exception exception)
-            {
-                // TODO:
-                logger.LogError(exception, "Error");
-            }
-            Console.WriteLine("Streaming completed");
-        });
         
         Task.Run(async () =>
         {

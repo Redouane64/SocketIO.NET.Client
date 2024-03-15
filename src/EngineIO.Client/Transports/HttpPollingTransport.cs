@@ -13,6 +13,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly CancellationTokenSource _pollingCancellationToken = new();
+    private readonly byte _separator = 0x1E;
     
     private bool _handshake;
     private string _path;
@@ -67,12 +68,11 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
     
         var packets = new Collection<Packet>();
-        short separator = 0x1E;
 
         var start = 0;
         for (var index = start; index < data.Length; index++)
         {
-            if (data[index] == separator)
+            if (data[index] == _separator)
             {
                 var payload = new ReadOnlyMemory<byte>(data, start, index - start);
                 packets.Add(Packet.Parse(payload));
@@ -96,34 +96,22 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             throw new Exception("Transport is not connected");
         }
 
-        if (packet.Length > MaxPayload)
-        {
-            throw new Exception("Max packet payload exceeded");
-        }
-
         HttpContent? content = null;
         try
         {
             await _semaphore.WaitAsync(cancellationToken);
-
-            if (packet.Format == PacketFormat.Binary)
-            {
-                var data = packet.ToBinaryPacket(new Base64Encoder());
-                content = new ReadOnlyMemoryContent(data);
-                content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            }
-            else
-            {
-                content = new ReadOnlyMemoryContent(packet.ToPlaintextPacket());
-                content.Headers.ContentType = new MediaTypeHeaderValue("text/plain", "utf-8");
-            }
             
-            using var response = await _httpClient.PostAsync(_path, content,
-                cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception("Unexpected response from remote server");
-            }
+            ReadOnlyMemory<byte> data = packet.Format == PacketFormat.Binary 
+                ? packet.ToBinaryPacket(new Base64Encoder()) 
+                : packet.ToPlaintextPacket();
+            
+            content = new ReadOnlyMemoryContent(data);
+            content.Headers.ContentType = packet.Format == PacketFormat.Binary 
+                ? new MediaTypeHeaderValue("application/octet-stream") 
+                : new MediaTypeHeaderValue("text/plain", "utf-8");
+            
+            using var response = await _httpClient.PostAsync(_path, content, cancellationToken);
+            response.EnsureSuccessStatusCode();
         }
         finally
         {

@@ -93,7 +93,14 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             WebSocketReceiveResult receiveResult;
             do
             {
-                receiveResult = await _client.ReceiveAsync(buffer, cancellationToken);
+                try
+                {
+                    receiveResult = await _client.ReceiveAsync(buffer, cancellationToken);
+                }
+                catch
+                {
+                    break;
+                }
 
                 if (receiveResult.MessageType == WebSocketMessageType.Close)
                 {
@@ -122,8 +129,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         return new Collection<Packet> { new Packet(format, type, content) }.AsReadOnly();
     }
 
-    public async Task SendAsync(Packet packet,
-        CancellationToken cancellationToken = default)
+    public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)
     {
         if (_client.State == WebSocketState.Closed)
         {
@@ -133,17 +139,8 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         try
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);
-            // TODO: if packet length exceeds MaxPayload, it should be sent with multiple Send calls.
-
-            ReadOnlyMemory<byte> data;
-            if (packet.Format == PacketFormat.Binary)
-            {
-                data = packet.ToBinaryPacket(new Base64Encoder());
-            }
-            else
-            {
-                data = packet.ToPlaintextPacket();
-            }
+            ReadOnlyMemory<byte> data = packet.Format == PacketFormat.Binary 
+                ? packet.ToBinaryPacket(new Base64Encoder()) : packet.ToPlaintextPacket();
             await _client.SendAsync(data, WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage, cancellationToken);
         }
         finally

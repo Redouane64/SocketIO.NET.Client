@@ -23,7 +23,7 @@ public interface ITransport
     ///     Fetch raw packets from server.
     /// </summary>
     /// <returns>Packets as an array of Bytes.</returns>
-    Task<IReadOnlyList<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default);
+    Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Send raw packets to server.

@@ -81,7 +81,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _client.Abort();
     }
 
-    public async Task<IReadOnlyList<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         var buffer = new byte[16];
         var receivedCount = 0;
@@ -121,7 +121,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             _receiveSemaphore.Release();
         }
 
-        return new List<ReadOnlyMemory<byte>>() { new(buffer) };
+        return new ReadOnlyCollection<ReadOnlyMemory<byte>>(new[] { new ReadOnlyMemory<byte>(buffer) });
     }
 
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format, CancellationToken cancellationToken = default)

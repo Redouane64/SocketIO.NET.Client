@@ -15,7 +15,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly CancellationTokenSource _pollingCancellationToken = new();
     private readonly byte _separator = 0x1E;
 
-    private bool _handshake;
+    private bool _connected;
     private string _path;
 
     public HttpPollingTransport(string baseAddress)
@@ -91,7 +91,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format, CancellationToken cancellationToken = default)
     {
-        if (!_handshake)
+        if (!_connected)
         {
             throw new Exception("Transport is not connected");
         }
@@ -113,9 +113,9 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
     }
 
-    public async Task Handshake(CancellationToken cancellationToken = default)
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        if (_handshake)
+        if (_connected)
         {
             return;
         }
@@ -138,7 +138,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         Upgrades = handshake.Upgrades;
 
         _path += $"&sid={Sid}";
-        _handshake = true;
+        _connected = true;
     }
 
     private class HandshakePacket

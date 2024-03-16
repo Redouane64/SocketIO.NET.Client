@@ -15,7 +15,7 @@ public interface ITransport
     /// </summary>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    Task Handshake(CancellationToken cancellationToken = default);
+    Task ConnectAsync(CancellationToken cancellationToken = default);
 
     Task Disconnect();
 

@@ -16,7 +16,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     private readonly Uri _uri;
     private readonly string _sid;
 
-    private bool _handshake;
+    private bool _connected;
 
     public WebSocketTransport(string baseAddress, string sid)
     {
@@ -48,9 +48,9 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _pollingCancellationToken.Dispose();
     }
 
-    public async Task Handshake(CancellationToken cancellationToken = default)
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        if (_handshake)
+        if (_connected)
         {
             return;
         }
@@ -72,7 +72,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         // upgrade
         await SendAsync(Packet.UpgradePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
 
-        _handshake = true;
+        _connected = true;
     }
 
     public async Task Disconnect()

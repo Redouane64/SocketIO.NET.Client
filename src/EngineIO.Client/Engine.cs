@@ -30,14 +30,14 @@ public sealed class Engine : IDisposable
     public async Task ConnectAsync()
     {
         Transport = _httpTransport = new HttpPollingTransport(_clientOptions.Uri!);
-        await _httpTransport.Handshake(_pollingCancellationTokenSource.Token);
+        await _httpTransport.ConnectAsync(_pollingCancellationTokenSource.Token);
 
         if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades!.Contains("websocket"))
         {
             await _pollingCancellationTokenSource.CancelAsync();
             _pollingCancellationTokenSource.Dispose();
             Transport = _wsTransport = new WebSocketTransport(_clientOptions.Uri!, _httpTransport.Sid!);
-            await _wsTransport.Handshake();
+            await _wsTransport.ConnectAsync();
 
             _pollingCancellationTokenSource = new CancellationTokenSource();
         }

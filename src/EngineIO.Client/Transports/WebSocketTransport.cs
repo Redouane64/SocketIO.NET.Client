@@ -15,7 +15,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     private readonly CancellationTokenSource _pollingCancellationToken = new();
     private readonly Uri _uri;
     private readonly string _sid;
-    
+
     private bool _handshake;
 
     public WebSocketTransport(string baseAddress, string sid)
@@ -37,7 +37,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _uri = new Uri(uri);
         _client = new ClientWebSocket();
     }
-    
+
     public string Name => "websocket";
 
     public void Dispose()
@@ -58,7 +58,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         await _client.ConnectAsync(_uri, cancellationToken);
 
         // ping probe
-        await SendAsync(Packet.PingProbePacket, cancellationToken);
+        await SendAsync(Packet.PingProbePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
 
         // pong probe
         var pongProbePacket = await GetAsync(cancellationToken);
@@ -70,7 +70,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
         // upgrade
         var upgradePacket = new byte[1] { (byte)PacketType.Upgrade };
-        await SendAsync(Packet.UpgradePacket, cancellationToken);
+        await SendAsync(Packet.UpgradePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
 
         _handshake = true;
     }
@@ -129,7 +129,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         return new Collection<Packet> { new Packet(format, type, content) }.AsReadOnly();
     }
 
-    public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)
+    public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format, CancellationToken cancellationToken = default)
     {
         if (_client.State == WebSocketState.Closed)
         {
@@ -139,9 +139,8 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         try
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);
-            ReadOnlyMemory<byte> data = packet.Format == PacketFormat.Binary 
-                ? packet.ToBinaryPacket(new Base64Encoder()) : packet.ToPlaintextPacket();
-            await _client.SendAsync(data, WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage, cancellationToken);
+            // TODO: what does WebSocketMessageType value mean?
+            await _client.SendAsync(packets, WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage, cancellationToken);
         }
         finally
         {

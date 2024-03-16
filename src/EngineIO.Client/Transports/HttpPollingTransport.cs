@@ -14,7 +14,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly CancellationTokenSource _pollingCancellationToken = new();
     private readonly byte _separator = 0x1E;
-    
+
     private bool _handshake;
     private string _path;
 
@@ -24,13 +24,13 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
         _httpClient.Timeout = Timeout.InfiniteTimeSpan;
         _httpClient.DefaultRequestHeaders.ConnectionClose = false;
-        
+
         _httpClient.BaseAddress = new Uri(baseAddress);
         _path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }
 
     public string Name => "polling";
-    
+
     public string? Sid { get; private set; }
 
     public string[]? Upgrades { get; private set; }
@@ -47,10 +47,10 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _semaphore.Dispose();
         _pollingCancellationToken.Dispose();
     }
-    
+
     public async Task Disconnect()
     {
-        await SendAsync(Packet.ClosePacket);
+        await SendAsync(Packet.ClosePacket.ToPlaintextPacket(), PacketFormat.PlainText);
         await _pollingCancellationToken.CancelAsync();
     }
 
@@ -66,7 +66,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         {
             _semaphore.Release();
         }
-    
+
         var packets = new Collection<Packet>();
 
         var start = 0;
@@ -89,34 +89,27 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         return packets.AsReadOnly();
     }
 
-    public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)
+    public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format, CancellationToken cancellationToken = default)
     {
         if (!_handshake)
         {
             throw new Exception("Transport is not connected");
         }
 
-        HttpContent? content = null;
         try
         {
-            await _semaphore.WaitAsync(cancellationToken);
-            
-            ReadOnlyMemory<byte> data = packet.Format == PacketFormat.Binary 
-                ? packet.ToBinaryPacket(new Base64Encoder()) 
-                : packet.ToPlaintextPacket();
-            
-            content = new ReadOnlyMemoryContent(data);
-            content.Headers.ContentType = packet.Format == PacketFormat.Binary 
-                ? new MediaTypeHeaderValue("application/octet-stream") 
+            using var content = new ReadOnlyMemoryContent(packets);
+            content.Headers.ContentType = format == PacketFormat.Binary
+                ? new MediaTypeHeaderValue("application/octet-stream")
                 : new MediaTypeHeaderValue("text/plain", "utf-8");
-            
+
+            await _semaphore.WaitAsync(cancellationToken);
             using var response = await _httpClient.PostAsync(_path, content, cancellationToken);
             response.EnsureSuccessStatusCode();
         }
         finally
         {
             _semaphore.Release();
-            content?.Dispose();
         }
     }
 
@@ -129,7 +122,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
         var data = await GetAsync(cancellationToken);
         var packet = data[0];
-        
+
         if (packet.Type != PacketType.Open)
         {
             throw new Exception("Unexpected packet type");
@@ -143,11 +136,11 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         PingInterval = handshake.PingInterval;
         PingTimeout = handshake.PingTimeout;
         Upgrades = handshake.Upgrades;
-        
+
         _path += $"&sid={Sid}";
         _handshake = true;
     }
-    
+
     private class HandshakePacket
     {
         [JsonPropertyName("sid")]

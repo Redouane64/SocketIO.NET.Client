@@ -61,15 +61,15 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         await SendAsync(Packet.PingProbePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
 
         // pong probe
-        var pongProbePacket = await GetAsync(cancellationToken);
+        var data = await GetAsync(cancellationToken);
+        var packet = Packet.Parse(data[0]);
 
-        if (pongProbePacket[0].Type != PacketType.Pong)
+        if (packet.Type != PacketType.Pong)
         {
             throw new Exception("Unexpected response from server");
         }
 
         // upgrade
-        var upgradePacket = new byte[1] { (byte)PacketType.Upgrade };
         await SendAsync(Packet.UpgradePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
 
         _handshake = true;
@@ -81,7 +81,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _client.Abort();
     }
 
-    public async Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         var buffer = new byte[16];
         var receivedCount = 0;
@@ -121,12 +121,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             _receiveSemaphore.Release();
         }
 
-        var packet = new ReadOnlyMemory<byte>(buffer);
-        var format = packet.Span[0] == 98 ? PacketFormat.Binary : PacketFormat.PlainText;
-        var type = format == PacketFormat.PlainText ? (PacketType)packet.Span[0] : PacketType.Message;
-        var content = packet[1..];
-
-        return new Collection<Packet> { new Packet(format, type, content) }.AsReadOnly();
+        return new List<ReadOnlyMemory<byte>>() { new(buffer) };
     }
 
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format, CancellationToken cancellationToken = default)

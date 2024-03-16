@@ -54,7 +54,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         await _pollingCancellationToken.CancelAsync();
     }
 
-    public async Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         var data = Array.Empty<byte>();
         try
@@ -67,7 +67,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             _semaphore.Release();
         }
 
-        var packets = new Collection<Packet>();
+        var packets = new List<ReadOnlyMemory<byte>>();
 
         var start = 0;
         for (var index = start; index < data.Length; index++)
@@ -75,7 +75,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             if (data[index] == _separator)
             {
                 var payload = new ReadOnlyMemory<byte>(data, start, index - start);
-                packets.Add(Packet.Parse(payload));
+                packets.Add(payload);
                 start = index + 1;
             }
         }
@@ -83,10 +83,10 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         if (start < data.Length)
         {
             var payload = new ReadOnlyMemory<byte>(data, start, data.Length - start);
-            packets.Add(Packet.Parse(payload));
+            packets.Add(payload);
         }
 
-        return packets.AsReadOnly();
+        return packets;
     }
 
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format, CancellationToken cancellationToken = default)
@@ -121,7 +121,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
 
         var data = await GetAsync(cancellationToken);
-        var packet = data[0];
+        var packet = Packet.Parse(data[0]);
 
         if (packet.Type != PacketType.Open)
         {

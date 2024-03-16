@@ -17,7 +17,7 @@ public static class PacketExtensions
         {
             throw new InvalidOperationException("Wrong packet format");
         }
-        
+
         var payload = new byte[1 + packet.Body.Length];
         payload[0] = (byte)packet.Type;
         for (int i = 1; i <= packet.Body.Length; i++)
@@ -42,7 +42,7 @@ public static class PacketExtensions
             throw new InvalidOperationException("Wrong packet format");
         }
 
-        var encodedBody = encoder.Encode(packet.Body, Encoding.UTF8); 
+        var encodedBody = encoder.Encode(packet.Body, Encoding.UTF8);
         var payload = new byte[1 + encodedBody.Length];
         payload[0] = (byte)'b';
         for (int i = 1; i <= encodedBody.Length; i++)

@@ -8,9 +8,9 @@ namespace EngineIO.Client.Packets;
 public readonly struct Packet
 {
     public static readonly Packet OpenPacket = Parse(new byte[] { (byte)PacketType.Open });
-    
+
     public static readonly Packet ClosePacket = Parse(new byte[] { (byte)PacketType.Close });
-    
+
     public static readonly Packet PongPacket = Parse(new byte[] { (byte)PacketType.Pong });
 
     public static readonly Packet PingProbePacket = Parse(new byte[]
@@ -44,7 +44,7 @@ public readonly struct Packet
     {
         return new Packet(PacketFormat.Binary, PacketType.Message, body);
     }
-    
+
     public Packet(PacketFormat format, PacketType type, ReadOnlyMemory<byte> body)
     {
         Format = format;

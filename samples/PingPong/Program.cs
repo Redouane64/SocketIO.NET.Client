@@ -31,7 +31,7 @@ internal class Program
         await engine.ConnectAsync();
 
         var cts = new CancellationTokenSource();
-        
+
         Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
@@ -45,6 +45,6 @@ internal class Program
 
         await cts.CancelAsync();
         await engine.DisconnectAsync();
-        
+
     }
 }

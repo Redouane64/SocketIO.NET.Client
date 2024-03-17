@@ -12,7 +12,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
-    private readonly CancellationTokenSource _pollingCancellationToken = new();
     private readonly byte _separator = 0x1E;
 
     private bool _connected;
@@ -40,13 +39,11 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     {
         _httpClient.Dispose();
         _semaphore.Dispose();
-        _pollingCancellationToken.Dispose();
     }
 
     public async Task Disconnect()
     {
         await SendAsync(Packet.ClosePacket.ToPlaintextPacket(), PacketFormat.PlainText);
-        await _pollingCancellationToken.CancelAsync();
     }
 
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)

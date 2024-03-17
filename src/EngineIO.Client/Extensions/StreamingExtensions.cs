@@ -14,7 +14,7 @@ public static class StreamingExtensions
     public static async IAsyncEnumerable<Packet> ListenAsync(this Engine engine, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         using var streamingCancellationToken =
-            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, engine._pollingCancellationTokenSource.Token);
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, engine.PollingCancellationTokenSource.Token);
         while (!streamingCancellationToken.IsCancellationRequested)
         {
             if (engine.Messages.TryDequeue(out var packet))

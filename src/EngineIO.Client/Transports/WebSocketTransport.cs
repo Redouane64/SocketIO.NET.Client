@@ -12,7 +12,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     private readonly SemaphoreSlim _receiveSemaphore = new(1, 1);
     private readonly SemaphoreSlim _sendSemaphore = new(1, 1);
 
-    private readonly CancellationTokenSource _pollingCancellationToken = new();
     private readonly Uri _uri;
     private readonly string _sid;
 
@@ -44,7 +43,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _client.Dispose();
         _receiveSemaphore.Dispose();
         _sendSemaphore.Dispose();
-        _pollingCancellationToken.Dispose();
     }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -74,10 +72,10 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _connected = true;
     }
 
-    public async Task Disconnect()
+    public Task Disconnect()
     {
-        await _pollingCancellationToken.CancelAsync();
         _client.Abort();
+        return Task.CompletedTask;
     }
 
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)

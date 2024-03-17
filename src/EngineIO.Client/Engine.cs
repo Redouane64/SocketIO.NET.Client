@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transport;
@@ -14,7 +15,7 @@ public sealed class Engine : IDisposable
     private readonly string _baseAddress;
     private HttpPollingTransport _httpTransport;
     private WebSocketTransport _wsTransport;
-    private CancellationTokenSource _pollingCancellationTokenSource = new();
+    internal CancellationTokenSource _pollingCancellationTokenSource = new();
 
     private bool _connected;
 
@@ -30,7 +31,8 @@ public sealed class Engine : IDisposable
         _baseAddress = _clientOptions.Uri;
     }
 
-    public ITransport Transport { get; private set; }
+    internal ITransport Transport { get; private set; }
+    internal ConcurrentQueue<Packet> Messages { get; } = new ConcurrentQueue<Packet>();
 
     public void Dispose()
     {
@@ -94,7 +96,7 @@ public sealed class Engine : IDisposable
 
                 if (packet.Type == PacketType.Message)
                 {
-                    // TODO:
+                    Messages.Enqueue(packet);
                 }
             }
 

@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transport;
 
@@ -5,17 +6,28 @@ namespace EngineIO.Client;
 
 public sealed class Engine : IDisposable
 {
+    private readonly HttpClient _httpClient;
+    private readonly ClientWebSocket _wsClient;
     private readonly ClientOptions _clientOptions = new();
-    private readonly IEncoder base64Encoder = new Base64Encoder();
+    private readonly IEncoder _base64Encoder = new Base64Encoder();
 
-    private bool _connected;
+    private readonly string _baseAddress;
     private HttpPollingTransport _httpTransport;
     private WebSocketTransport _wsTransport;
     private CancellationTokenSource _pollingCancellationTokenSource = new();
 
+    private bool _connected;
+
     public Engine(Action<ClientOptions> configure)
     {
         configure(_clientOptions);
+        _httpClient = new HttpClient();
+        _httpClient.BaseAddress = new Uri(_clientOptions.Uri);
+        _httpClient.Timeout = Timeout.InfiniteTimeSpan;
+        _httpClient.DefaultRequestHeaders.ConnectionClose = false;
+
+        _wsClient = new ClientWebSocket();
+        _baseAddress = _clientOptions.Uri;
     }
 
     public ITransport Transport { get; private set; }
@@ -29,14 +41,14 @@ public sealed class Engine : IDisposable
 
     public async Task ConnectAsync()
     {
-        Transport = _httpTransport = new HttpPollingTransport(_clientOptions.Uri!);
+        Transport = _httpTransport = new HttpPollingTransport(_httpClient);
         await _httpTransport.ConnectAsync(_pollingCancellationTokenSource.Token);
 
         if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades!.Contains("websocket"))
         {
             await _pollingCancellationTokenSource.CancelAsync();
             _pollingCancellationTokenSource.Dispose();
-            Transport = _wsTransport = new WebSocketTransport(_clientOptions.Uri!, _httpTransport.Sid!);
+            Transport = _wsTransport = new WebSocketTransport(_baseAddress, _httpTransport.Sid!, _wsClient);
             await _wsTransport.ConnectAsync();
 
             _pollingCancellationTokenSource = new CancellationTokenSource();
@@ -119,7 +131,7 @@ public sealed class Engine : IDisposable
     /// <param name="cancellationToken"></param>
     public async Task SendAsync(ReadOnlyMemory<byte> binary, CancellationToken cancellationToken = default)
     {
-        var packet = Packet.CreateBinaryPacket(binary).ToBinaryPacket(base64Encoder);
+        var packet = Packet.CreateBinaryPacket(binary).ToBinaryPacket(_base64Encoder);
         await Transport.SendAsync(packet, PacketFormat.Binary, cancellationToken);
     }
 }

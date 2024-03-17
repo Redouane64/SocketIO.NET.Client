@@ -18,14 +18,9 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private bool _connected;
     private string _path;
 
-    public HttpPollingTransport(string baseAddress)
+    public HttpPollingTransport(HttpClient httpClient)
     {
-        _httpClient = new HttpClient();
-
-        _httpClient.Timeout = Timeout.InfiniteTimeSpan;
-        _httpClient.DefaultRequestHeaders.ConnectionClose = false;
-
-        _httpClient.BaseAddress = new Uri(baseAddress);
+        _httpClient = httpClient;
         _path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }
 

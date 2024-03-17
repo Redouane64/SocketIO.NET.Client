@@ -18,8 +18,9 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     private bool _connected;
 
-    public WebSocketTransport(string baseAddress, string sid)
+    public WebSocketTransport(string baseAddress, string sid, ClientWebSocket client)
     {
+        _client = client;
         _sid = sid ?? throw new ArgumentException("Sid is missing");
 
         if (baseAddress.StartsWith(Uri.UriSchemeHttp))
@@ -33,9 +34,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         }
 
         var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}&sid={sid}";
-
         _uri = new Uri(uri);
-        _client = new ClientWebSocket();
     }
 
     public string Name => "websocket";

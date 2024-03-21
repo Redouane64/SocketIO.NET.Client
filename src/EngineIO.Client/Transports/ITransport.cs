@@ -1,4 +1,7 @@
+using System;
 using System.Collections.ObjectModel;
+using System.Threading;
+using System.Threading.Tasks;
 using EngineIO.Client.Packets;
 
 namespace EngineIO.Client.Transport;

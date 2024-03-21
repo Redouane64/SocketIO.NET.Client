@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EngineIO.Client;
+using EngineIO.Client.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 
@@ -22,29 +24,38 @@ internal class Program
         });
 
         var logger = loggerFactory.CreateLogger<Program>();
+        CancellationTokenSource cts = new();
 
         using var engine = new Engine((options) =>
         {
             options.Uri = "http://127.0.0.1:9854";
             options.AutoUpgrade = false;
         });
+
+        Console.CancelKeyPress += async (sender, eventArgs) =>
+        {
+            await cts.CancelAsync();
+        };
+
         await engine.ConnectAsync();
 
-        var cts = new CancellationTokenSource();
 
         Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
-            while (await timer.WaitForNextTickAsync(cts.Token))
+            while (await timer.WaitForNextTickAsync())
             {
                 await engine.SendAsync("Hello from client!!");
             }
         });
 
-        Console.ReadKey();
+        await foreach (var packet in engine.ListenAsync(cts.Token))
+        {
+            var message = Encoding.UTF8.GetString(packet.Body.Span);
+            logger.LogInformation("Server: {message}", message);
+        }
 
-        await cts.CancelAsync();
         await engine.DisconnectAsync();
-
     }
+
 }

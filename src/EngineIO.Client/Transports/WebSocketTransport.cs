@@ -11,9 +11,9 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _receiveSemaphore = new(1, 1);
     private readonly SemaphoreSlim _sendSemaphore = new(1, 1);
+    private readonly string _sid;
 
     private readonly Uri _uri;
-    private readonly string _sid;
 
     private bool _connected;
 
@@ -36,14 +36,14 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _uri = new Uri(uri);
     }
 
-    public string Name => "websocket";
-
     public void Dispose()
     {
         _client.Dispose();
         _receiveSemaphore.Dispose();
         _sendSemaphore.Dispose();
     }
+
+    public string Name => "websocket";
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -110,7 +110,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                 {
                     Array.Resize(ref buffer, buffer.Length + receivedCount);
                 }
-
             } while (!receiveResult.EndOfMessage);
         }
         finally
@@ -121,7 +120,8 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         return new ReadOnlyCollection<ReadOnlyMemory<byte>>(new[] { new ReadOnlyMemory<byte>(buffer) });
     }
 
-    public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format, CancellationToken cancellationToken = default)
+    public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
+        CancellationToken cancellationToken = default)
     {
         if (_client.State == WebSocketState.Closed)
         {
@@ -132,7 +132,8 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);
             // TODO: what does WebSocketMessageType value mean?
-            await _client.SendAsync(packets, WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage, cancellationToken);
+            await _client.SendAsync(packets, WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage,
+                cancellationToken);
         }
         finally
         {

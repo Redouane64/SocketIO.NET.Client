@@ -3,17 +3,17 @@ using System.Text;
 namespace EngineIO.Client.Packets;
 
 /// <summary>
-/// Represent a message packet.
+///     Represent a message packet.
 /// </summary>
 public readonly struct Packet
 {
-    public static readonly Packet OpenPacket = Parse(new byte[] { (byte)PacketType.Open });
+    public static readonly Packet OpenPacket = Parse(new[] { (byte)PacketType.Open });
 
-    public static readonly Packet ClosePacket = Parse(new byte[] { (byte)PacketType.Close });
+    public static readonly Packet ClosePacket = Parse(new[] { (byte)PacketType.Close });
 
-    public static readonly Packet PongPacket = Parse(new byte[] { (byte)PacketType.Pong });
+    public static readonly Packet PongPacket = Parse(new[] { (byte)PacketType.Pong });
 
-    public static readonly Packet PingProbePacket = Parse(new byte[]
+    public static readonly Packet PingProbePacket = Parse(new[]
     {
         (byte)PacketType.Ping, (byte)'p', (byte)'r', (byte)'o', (byte)'b', (byte)'e'
     });
@@ -21,7 +21,7 @@ public readonly struct Packet
     public static readonly Packet UpgradePacket = Parse(new byte[1] { (byte)PacketType.Upgrade });
 
     /// <summary>
-    /// Parse packet from raw payload.
+    ///     Parse packet from raw payload.
     /// </summary>
     /// <param name="packet">Packet payload</param>
     /// <returns>Packet instance</returns>
@@ -54,22 +54,22 @@ public readonly struct Packet
     }
 
     /// <summary>
-    /// Represent packet payload size including the type byte.
+    ///     Represent packet payload size including the type byte.
     /// </summary>
     public int Length { get; }
 
     /// <summary>
-    /// Represents packet type.
+    ///     Represents packet type.
     /// </summary>
     public PacketType Type { get; }
 
     /// <summary>
-    /// Indicate content format stored in the packet.
+    ///     Indicate content format stored in the packet.
     /// </summary>
     public PacketFormat Format { get; }
 
     /// <summary>
-    /// Packet body excluding packet type.
+    ///     Packet body excluding packet type.
     /// </summary>
     public ReadOnlyMemory<byte> Body { get; }
 }

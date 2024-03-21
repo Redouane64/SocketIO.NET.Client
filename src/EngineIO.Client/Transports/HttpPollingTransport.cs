@@ -23,8 +23,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }
 
-    public string Name => "polling";
-
     public string? Sid { get; private set; }
 
     public string[]? Upgrades { get; private set; }
@@ -40,6 +38,8 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _httpClient.Dispose();
         _semaphore.Dispose();
     }
+
+    public string Name => "polling";
 
     public async Task Disconnect()
     {
@@ -81,7 +81,8 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         return packets.AsReadOnly();
     }
 
-    public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format, CancellationToken cancellationToken = default)
+    public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
+        CancellationToken cancellationToken = default)
     {
         if (!_connected)
         {

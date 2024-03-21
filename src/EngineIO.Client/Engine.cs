@@ -7,16 +7,16 @@ namespace EngineIO.Client;
 
 public sealed class Engine : IDisposable
 {
-    private readonly HttpClient _httpClient;
-    private readonly ClientWebSocket _wsClient;
-    private readonly ClientOptions _clientOptions = new();
     private readonly IEncoder _base64Encoder = new Base64Encoder();
 
     private readonly string _baseAddress;
-    private HttpPollingTransport _httpTransport;
-    private WebSocketTransport _wsTransport;
+    private readonly ClientOptions _clientOptions = new();
+    private readonly HttpClient _httpClient;
+    private readonly ClientWebSocket _wsClient;
 
     private bool _connected;
+    private HttpPollingTransport _httpTransport;
+    private WebSocketTransport _wsTransport;
 
     internal CancellationTokenSource PollingCancellationTokenSource = new();
 
@@ -33,7 +33,7 @@ public sealed class Engine : IDisposable
     }
 
     internal ITransport Transport { get; private set; }
-    internal ConcurrentQueue<Packet> Messages { get; } = new ConcurrentQueue<Packet>();
+    internal ConcurrentQueue<Packet> Messages { get; } = new();
 
     public void Dispose()
     {
@@ -81,10 +81,10 @@ public sealed class Engine : IDisposable
                 // Handle heartbeat packet and yield the other packet types to the caller
                 if (packet.Type == PacketType.Ping)
                 {
-#pragma warning disable CS4014 
+#pragma warning disable CS4014
                     Transport.SendAsync(Packet.PongPacket.ToPlaintextPacket(), PacketFormat.PlainText,
                         PollingCancellationTokenSource.Token).ConfigureAwait(false);
-#pragma warning restore CS4014 
+#pragma warning restore CS4014
                     continue;
                 }
 
@@ -100,7 +100,6 @@ public sealed class Engine : IDisposable
                     Messages.Enqueue(packet);
                 }
             }
-
         }
     }
 
@@ -117,7 +116,7 @@ public sealed class Engine : IDisposable
     }
 
     /// <summary>
-    /// Send plain text message.
+    ///     Send plain text message.
     /// </summary>
     /// <param name="text">Plain text message</param>
     /// <param name="cancellationToken"></param>
@@ -128,7 +127,7 @@ public sealed class Engine : IDisposable
     }
 
     /// <summary>
-    /// Send binary message.
+    ///     Send binary message.
     /// </summary>
     /// <param name="binary">Binary data</param>
     /// <param name="cancellationToken"></param>

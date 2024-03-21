@@ -59,8 +59,13 @@ public sealed class Engine : IDisposable
 
         _connected = true;
 #pragma warning disable CS4014
-        Task.Run(() => PollAsync().ConfigureAwait(false), PollingCancellationTokenSource.Token).ConfigureAwait(false);
+        Task.Run(StartPolling, PollingCancellationTokenSource.Token).ConfigureAwait(false);
 #pragma warning restore CS4014
+    }
+
+    private void StartPolling()
+    {
+        PollAsync().ConfigureAwait(false);
     }
 
     internal async Task PollAsync()

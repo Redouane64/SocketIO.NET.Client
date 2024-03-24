@@ -1,9 +1,11 @@
 using System;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transport;
@@ -22,7 +24,8 @@ public sealed class Engine : IDisposable
     private bool _connected;
     private HttpPollingTransport _httpTransport;
     private WebSocketTransport _wsTransport;
-
+    
+    internal readonly Channel<Packet> PacketsChannel = Channel.CreateUnbounded<Packet>();
     internal CancellationTokenSource PollingCancellationTokenSource = new();
 
     public Engine(Action<ClientOptions> configure)
@@ -38,7 +41,6 @@ public sealed class Engine : IDisposable
     }
 
     internal ITransport Transport { get; private set; }
-    internal ConcurrentQueue<Packet> Messages { get; } = new();
 
     public void Dispose()
     {
@@ -75,6 +77,8 @@ public sealed class Engine : IDisposable
 
     internal async Task PollAsync()
     {
+        var writer = PacketsChannel.Writer;
+        
         while (!PollingCancellationTokenSource.IsCancellationRequested)
         {
             var packets = await Transport.GetAsync(PollingCancellationTokenSource.Token);
@@ -102,7 +106,9 @@ public sealed class Engine : IDisposable
 
                 if (packet.Type == PacketType.Message)
                 {
-                    Messages.Enqueue(packet);
+#pragma warning disable CS4014
+                    writer.WriteAsync(packet, PollingCancellationTokenSource.Token).ConfigureAwait(false);
+#pragma warning restore CS4014
                 }
             }
         }
@@ -118,6 +124,24 @@ public sealed class Engine : IDisposable
         await PollingCancellationTokenSource.CancelAsync();
         await Transport.Disconnect();
         _connected = false;
+    }
+    
+    /// <summary>
+    ///     Listen for messages stream.
+    /// </summary>
+    /// <param name="engine">EngineIO client instance</param>
+    /// <param name="cancellationToken"></param>
+    /// <returns>Packets</returns>
+    public async IAsyncEnumerable<Packet> ListenAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        using var streamingCancellationToken =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
+                PollingCancellationTokenSource.Token);
+        var reader = PacketsChannel.Reader;
+        while (!streamingCancellationToken.IsCancellationRequested)
+        {
+            yield return await reader.ReadAsync(streamingCancellationToken.Token);
+        }
     }
 
     /// <summary>

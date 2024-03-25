@@ -19,13 +19,13 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly byte _separator = 0x1E;
 
-    private bool _connected;
-    private string _path;
+    public bool Connected { get; private set; }
+    public string Path { get; private set; }
 
     public HttpPollingTransport(HttpClient httpClient)
     {
         _httpClient = httpClient;
-        _path = $"/engine.io?EIO={_protocol}&transport={Name}";
+        Path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }
 
     public string? Sid { get; private set; }
@@ -57,7 +57,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         try
         {
             await _semaphore.WaitAsync(cancellationToken);
-            data = await _httpClient.GetByteArrayAsync(_path, cancellationToken);
+            data = await _httpClient.GetByteArrayAsync(Path, cancellationToken);
         }
         finally
         {
@@ -89,7 +89,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
         CancellationToken cancellationToken = default)
     {
-        if (!_connected)
+        if (!Connected)
         {
             throw new Exception("Transport is not connected");
         }
@@ -102,7 +102,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 : new MediaTypeHeaderValue("text/plain", "utf-8");
 
             await _semaphore.WaitAsync(cancellationToken);
-            using var response = await _httpClient.PostAsync(_path, content, cancellationToken);
+            using var response = await _httpClient.PostAsync(Path, content, cancellationToken);
             response.EnsureSuccessStatusCode();
         }
         finally
@@ -113,7 +113,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        if (_connected)
+        if (Connected)
         {
             return;
         }
@@ -135,8 +135,8 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         PingTimeout = handshake.PingTimeout;
         Upgrades = handshake.Upgrades;
 
-        _path += $"&sid={Sid}";
-        _connected = true;
+        Path += $"&sid={Sid}";
+        Connected = true;
     }
 
     private class HandshakePacket

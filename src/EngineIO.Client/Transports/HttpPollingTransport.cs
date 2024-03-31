@@ -118,9 +118,17 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             return;
         }
 
-        var data = await GetAsync(cancellationToken);
-        var packet = Packet.Parse(data[0]);
-
+        ReadOnlyCollection<ReadOnlyMemory<byte>> response;
+        try
+        {
+            response = await GetAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            throw new Exception("Unable to connect", exception);
+        }
+        
+        var packet = Packet.Parse(response[0]);
         if (packet.Type != PacketType.Open)
         {
             throw new Exception("Unexpected packet type");

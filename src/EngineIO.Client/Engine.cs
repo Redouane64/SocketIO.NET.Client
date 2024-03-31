@@ -98,8 +98,8 @@ public sealed class Engine : IDisposable
 
                 if (packet.Type == PacketType.Close)
                 {
-                    await _pollingCancellationTokenSource.CancelAsync();
-                    // TODO:
+                    writer.Complete();
+                    await DisconnectAsync();
                     break;
                 }
 
@@ -133,13 +133,20 @@ public sealed class Engine : IDisposable
     /// <returns>Packets</returns>
     public async IAsyncEnumerable<Packet> ListenAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        using var streamingCancellationToken =
-            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
-                _pollingCancellationTokenSource.Token);
         var reader = _packetsChannel.Reader;
-        while (!streamingCancellationToken.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested)
         {
-            yield return await reader.ReadAsync(streamingCancellationToken.Token);
+            Packet packet;
+            try
+            {
+                packet = await reader.ReadAsync(cancellationToken);
+            }
+            catch (ChannelClosedException)
+            {
+                yield break;
+            }
+
+            yield return packet;
         }
     }
 

@@ -83,6 +83,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
+        var isClosed = false;
         var buffer = new byte[16];
         var receivedCount = 0;
 
@@ -105,6 +106,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                 if (receiveResult.MessageType == WebSocketMessageType.Close)
                 {
                     await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                    isClosed = true;
                     break;
                 }
 
@@ -118,6 +120,11 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         finally
         {
             _receiveSemaphore.Release();
+        }
+
+        if (isClosed)
+        {
+            buffer = new byte[1] { (byte)PacketType.Close };
         }
 
         return new ReadOnlyCollection<ReadOnlyMemory<byte>>(new[] { new ReadOnlyMemory<byte>(buffer) });

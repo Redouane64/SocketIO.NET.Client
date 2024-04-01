@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -99,11 +100,15 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             using var content = new ReadOnlyMemoryContent(packets);
             content.Headers.ContentType = format == PacketFormat.Binary
                 ? new MediaTypeHeaderValue("application/octet-stream")
-                : new MediaTypeHeaderValue("text/plain; utf-8");
+                : new MediaTypeHeaderValue("text/plain") {CharSet = Encoding.UTF8.WebName };
 
             await _semaphore.WaitAsync(cancellationToken);
             using var response = await _httpClient.PostAsync(Path, content, cancellationToken);
             response.EnsureSuccessStatusCode();
+        }
+        catch (Exception e)
+        {
+            // TODO:
         }
         finally
         {

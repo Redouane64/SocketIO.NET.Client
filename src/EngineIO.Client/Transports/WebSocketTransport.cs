@@ -83,7 +83,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
-        var isClosed = false;
+        var packets = new Collection<ReadOnlyMemory<byte>>();
         var buffer = new byte[16];
         var receivedCount = 0;
 
@@ -106,7 +106,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                 if (receiveResult.MessageType == WebSocketMessageType.Close)
                 {
                     await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
-                    isClosed = true;
+                    packets.Add(new [] { (byte)PacketType.Close });
                     break;
                 }
 
@@ -121,13 +121,9 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         {
             _receiveSemaphore.Release();
         }
-
-        if (isClosed)
-        {
-            buffer = new byte[1] { (byte)PacketType.Close };
-        }
-
-        return new ReadOnlyCollection<ReadOnlyMemory<byte>>(new[] { new ReadOnlyMemory<byte>(buffer) });
+        
+        packets.Add(buffer);
+        return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
     }
 
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
@@ -141,7 +137,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         try
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);
-            // TODO: what does WebSocketMessageType value mean?
             await _client.SendAsync(packets, WebSocketMessageType.Text, true, cancellationToken);
         }
         finally

@@ -55,7 +55,7 @@ public sealed class Engine : IDisposable
 
         if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades!.Contains("websocket"))
         {
-            await _pollingCancellationTokenSource.CancelAsync();
+            _pollingCancellationTokenSource.Cancel();
             _pollingCancellationTokenSource.Dispose();
             Transport = _wsTransport = new WebSocketTransport(_baseAddress, _httpTransport.Sid!, _wsClient);
             await _wsTransport.ConnectAsync();
@@ -120,7 +120,7 @@ public sealed class Engine : IDisposable
             return;
         }
 
-        await _pollingCancellationTokenSource.CancelAsync();
+        _pollingCancellationTokenSource.Cancel();
         await Transport.Disconnect();
         _connected = false;
     }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -57,14 +58,14 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         try
         {
             await _semaphore.WaitAsync(cancellationToken);
-            data = await _httpClient.GetByteArrayAsync(Path, cancellationToken);
+            data = await _httpClient.GetByteArrayAsync(Path);
         }
         finally
         {
             _semaphore.Release();
         }
 
-        var packets = new Collection<ReadOnlyMemory<byte>>();
+        var packets = new List<ReadOnlyMemory<byte>>();
 
         var start = 0;
         for (var index = start; index < data.Length; index++)
@@ -82,8 +83,8 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             var payload = new ReadOnlyMemory<byte>(data, start, data.Length - start);
             packets.Add(payload);
         }
-
-        return packets.AsReadOnly();
+        
+        return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
     }
 
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
@@ -99,7 +100,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             using var content = new ReadOnlyMemoryContent(packets);
             content.Headers.ContentType = format == PacketFormat.Binary
                 ? new MediaTypeHeaderValue("application/octet-stream")
-                : new MediaTypeHeaderValue("text/plain", "utf-8");
+                : new MediaTypeHeaderValue("text/plain; utf-8");
 
             await _semaphore.WaitAsync(cancellationToken);
             using var response = await _httpClient.PostAsync(Path, content, cancellationToken);
@@ -150,18 +151,18 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private class HandshakePacket
     {
         [JsonPropertyName("sid")]
-        public required string Sid { get; set; }
+        public string Sid { get; set; }
 
         [JsonPropertyName("upgrades")]
-        public required string[] Upgrades { get; set; }
+        public string[] Upgrades { get; set; }
 
         [JsonPropertyName("pingInterval")]
-        public required int PingInterval { get; set; }
+        public int PingInterval { get; set; }
 
         [JsonPropertyName("pingTimeout")]
-        public required int PingTimeout { get; set; }
+        public int PingTimeout { get; set; }
 
         [JsonPropertyName("maxPayload")]
-        public required int MaxPayload { get; set; }
+        public int MaxPayload { get; set; }
     }
 }

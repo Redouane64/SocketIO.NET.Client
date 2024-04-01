@@ -142,8 +142,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);
             // TODO: what does WebSocketMessageType value mean?
-            await _client.SendAsync(packets, WebSocketMessageType.Text, WebSocketMessageFlags.EndOfMessage,
-                cancellationToken);
+            await _client.SendAsync(packets, WebSocketMessageType.Text, true, cancellationToken);
         }
         finally
         {

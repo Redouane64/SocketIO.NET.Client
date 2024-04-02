@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -84,45 +85,35 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         var packets = new Collection<ReadOnlyMemory<byte>>();
+        var stream = new MemoryStream();
         var buffer = new byte[16];
-        var receivedCount = 0;
+        var count = 0;
 
         try
         {
             await _receiveSemaphore.WaitAsync(CancellationToken.None);
-
-            WebSocketReceiveResult receiveResult;
+            WebSocketReceiveResult result;
             do
             {
-                try
+                result = await _client.ReceiveAsync(buffer, cancellationToken);
+                if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    receiveResult = await _client.ReceiveAsync(buffer, cancellationToken);
-                }
-                catch
-                {
-                    break;
-                }
-
-                if (receiveResult.MessageType == WebSocketMessageType.Close)
-                {
-                    await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                    await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, String.Empty, CancellationToken.None);
                     packets.Add(new [] { (byte)PacketType.Close });
                     break;
                 }
 
-                receivedCount += receiveResult.Count;
-                if (receiveResult.Count > receivedCount - buffer.Length)
-                {
-                    Array.Resize(ref buffer, buffer.Length + receivedCount);
-                }
-            } while (!receiveResult.EndOfMessage);
+                await stream.WriteAsync(buffer, 0, result.Count, cancellationToken);
+            } while (!result.EndOfMessage);
         }
         finally
         {
             _receiveSemaphore.Release();
         }
+
+        stream.Seek(0, SeekOrigin.Begin);
         
-        packets.Add(buffer);
+        packets.Add(stream.ToArray());
         return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
     }
 

@@ -45,8 +45,8 @@ public sealed class Engine : IDisposable
     public void Dispose()
     {
         _pollingCancellationTokenSource.Dispose();
-        _httpTransport?.Dispose();
-        _wsTransport?.Dispose();
+        _httpTransport.Dispose();
+        _wsTransport.Dispose();
     }
 
     public async Task ConnectAsync()
@@ -75,7 +75,7 @@ public sealed class Engine : IDisposable
         PollAsync().ConfigureAwait(false);
     }
 
-    internal async Task PollAsync()
+    private async Task PollAsync()
     {
         var writer = _packetsChannel.Writer;
 
@@ -90,7 +90,6 @@ public sealed class Engine : IDisposable
                     Debug.WriteLine("polling encountered an invalid packet");
                     continue;
                 }
-
 
                 // Handle heartbeat packet and yield the other packet types to the caller
                 if (packet.Type == PacketType.Ping)

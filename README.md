@@ -1,6 +1,6 @@
-# SocketIO .NET Client
+# SocketIO Client for .NET
 
-Socket.IO .NET Client is an experimental project to implement Socket.IO protocol using modern .NET platform features.
+Socket.IO .NET Client is an experimental project aims to implement Socket.IO protocol using modern .NET platform features.
 
 ## Tasks
 - **Engine.IO Client**

@@ -30,8 +30,11 @@ public readonly struct Packet
     {
         var format = packet.Span[0] == 98 ? PacketFormat.Binary : PacketFormat.PlainText;
         var type = format == PacketFormat.PlainText ? (PacketType)packet.Span[0] : PacketType.Message;
+        if (!Enum.IsDefined(typeof(PacketType), type))
+        {
+            throw new Exception("Invalid packet type");
+        }
         var content = packet[1..];
-
         return new Packet(format, type, content);
     }
 

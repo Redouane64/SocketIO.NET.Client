@@ -59,4 +59,11 @@ public class PacketTests
         Assert.False(success);
         Assert.Equal(default(Packet), packet);
     }
+
+    [Fact]
+    void PingProbePacket_Should_Be_Valid()
+    {
+        var packet = Packet.PingProbePacket;
+        Assert.Equal((byte)PacketType.Ping, packet.ToPlaintextPacket().Span[0]);
+    }
 }

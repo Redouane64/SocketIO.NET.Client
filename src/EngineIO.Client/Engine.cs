@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Net.WebSockets;
@@ -84,16 +85,12 @@ public sealed class Engine : IDisposable
 
             foreach (var data in packets)
             {
-                Packet packet;
-                try
+                if (!Packet.TryParse(data, out var packet))
                 {
-                    packet = Packet.Parse(data);
-                }
-                catch (Exception)
-                {
-                    // TODO: 
+                    Debug.WriteLine("polling encountered an invalid packet");
                     continue;
                 }
+
 
                 // Handle heartbeat packet and yield the other packet types to the caller
                 if (packet.Type == PacketType.Ping)

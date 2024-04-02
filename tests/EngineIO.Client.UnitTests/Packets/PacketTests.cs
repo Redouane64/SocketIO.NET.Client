@@ -47,14 +47,16 @@ public class PacketTests
     [InlineData(PacketType.Upgrade, new[] { (byte)PacketType.Upgrade })]
     void Parse_Should_Parse_Packet(PacketType expectedType, ReadOnlyMemory<byte> message)
     {
-        var packet = Packet.Parse(message);
+        var success = Packet.TryParse(message, out var packet);
+        Assert.True(success);
         Assert.Equal(expectedType, packet.Type);
     }
 
     [Fact]
     void Parse_Should_Throw_Invalid_Packet_Type()
     {
-        var exception = Assert.Throws<Exception>(() => Packet.Parse(new byte[] { 1, 2, 3 } ));
-        Assert.Equal("Invalid packet type", exception.Message);
+        var success = Packet.TryParse(new byte[] { 1, 2, 3 }, out var packet);
+        Assert.False(success);
+        Assert.Equal(default(Packet), packet);
     }
 }

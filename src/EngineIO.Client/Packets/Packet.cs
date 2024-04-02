@@ -8,34 +8,37 @@ namespace EngineIO.Client.Packets;
 /// </summary>
 public readonly struct Packet
 {
-    public static readonly Packet OpenPacket = Parse(new[] { (byte)PacketType.Open });
+    public static readonly Packet OpenPacket = new Packet(PacketFormat.PlainText, PacketType.Open, Array.Empty<byte>());
 
-    public static readonly Packet ClosePacket = Parse(new[] { (byte)PacketType.Close });
+    public static readonly Packet ClosePacket = new Packet(PacketFormat.PlainText, PacketType.Close, Array.Empty<byte>());
 
-    public static readonly Packet PongPacket = Parse(new[] { (byte)PacketType.Pong });
+    public static readonly Packet PongPacket = new Packet(PacketFormat.PlainText, PacketType.Pong, Array.Empty<byte>());
 
-    public static readonly Packet PingProbePacket = Parse(new[]
-    {
-        (byte)PacketType.Ping, (byte)'p', (byte)'r', (byte)'o', (byte)'b', (byte)'e'
+    public static readonly Packet PingProbePacket = new Packet(PacketFormat.PlainText, PacketType.Ping, new [] {
+        (byte)'p', (byte)'r', (byte)'o', (byte)'b', (byte)'e'
     });
 
-    public static readonly Packet UpgradePacket = Parse(new byte[1] { (byte)PacketType.Upgrade });
+    public static readonly Packet UpgradePacket = new Packet(PacketFormat.PlainText, PacketType.Upgrade, Array.Empty<byte>());
 
     /// <summary>
     ///     Parse packet from raw payload.
     /// </summary>
-    /// <param name="packet">Packet payload</param>
-    /// <returns>Packet instance</returns>
-    public static Packet Parse(ReadOnlyMemory<byte> packet)
+    /// <param name="data">Buffer or raw payload</param>
+    /// <param name="packet">Parsed Packet instance</param>
+    /// <returns>Boolean indicating success or failure of parse operation</returns>
+    public static bool TryParse(ReadOnlyMemory<byte> data, out Packet packet)
     {
-        var format = packet.Span[0] == 98 ? PacketFormat.Binary : PacketFormat.PlainText;
-        var type = format == PacketFormat.PlainText ? (PacketType)packet.Span[0] : PacketType.Message;
+        var format = data.Span[0] == 98 ? PacketFormat.Binary : PacketFormat.PlainText;
+        var type = format == PacketFormat.PlainText ? (PacketType)data.Span[0] : PacketType.Message;
         if (!Enum.IsDefined(typeof(PacketType), type))
         {
-            throw new Exception("Invalid packet type");
+            packet = default;
+            return false;
         }
-        var content = packet[1..];
-        return new Packet(format, type, content);
+        
+        var content = data[1..];
+        packet = new Packet(format, type, content);
+        return true;
     }
 
     public static Packet CreateMessagePacket(string text)

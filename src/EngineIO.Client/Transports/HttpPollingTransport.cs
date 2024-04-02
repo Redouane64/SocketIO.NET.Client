@@ -133,7 +133,11 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             throw new Exception("Unable to connect", exception);
         }
         
-        var packet = Packet.Parse(response[0]);
+        if (!Packet.TryParse(response[0], out var packet))
+        {
+            throw new Exception("Unexpected packet type");
+        }
+        
         if (packet.Type != PacketType.Open)
         {
             throw new Exception("Unexpected packet type");

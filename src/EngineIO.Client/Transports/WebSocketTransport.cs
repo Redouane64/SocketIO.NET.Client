@@ -63,8 +63,11 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
         // pong probe
         var data = await GetAsync(cancellationToken);
-        var packet = Packet.Parse(data[0]);
-
+        if (!Packet.TryParse(data[0], out var packet))
+        {
+            throw new Exception("Unexpected response from server");
+        }
+        
         if (packet.Type != PacketType.Pong)
         {
             throw new Exception("Unexpected response from server");

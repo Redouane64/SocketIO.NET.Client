@@ -21,16 +21,19 @@ public sealed class Engine : IDisposable
     private readonly ClientOptions _clientOptions = new();
     private readonly HttpClient _httpClient;
     private readonly ClientWebSocket _webSocketClient;
-    private ITransport _transport;
     
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
 
     private bool _connected;
     private HttpPollingTransport _httpTransport;
     private WebSocketTransport _wsTransport;
+    private ITransport _transport;
+
     private CancellationTokenSource _pollingCancellationTokenSource = new();
 
+#pragma warning disable CS8618
     public Engine(Action<ClientOptions> configure)
+#pragma warning restore CS8618 
     {
         configure(_clientOptions);
         _httpClient = new HttpClient();

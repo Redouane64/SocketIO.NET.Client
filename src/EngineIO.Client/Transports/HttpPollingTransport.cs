@@ -54,7 +54,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
-        var data = Array.Empty<byte>();
+        byte[] data;
         try
         {
             await _semaphore.WaitAsync(cancellationToken);
@@ -142,11 +142,13 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         {
             throw new Exception("Unexpected packet type");
         }
-
+        
         var handshake = JsonSerializer
-            .Deserialize<HandshakePacket>(packet.Body.Span)!;
+            .Deserialize<HandshakePacket>(packet.Body.Span);
 
+#pragma warning disable CS8602
         Sid = handshake.Sid;
+#pragma warning restore CS8602
         MaxPayload = handshake.MaxPayload;
         PingInterval = handshake.PingInterval;
         PingTimeout = handshake.PingTimeout;
@@ -159,10 +161,10 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private class HandshakePacket
     {
         [JsonPropertyName("sid")]
-        public string Sid { get; set; }
+        public string? Sid { get; set; }
 
         [JsonPropertyName("upgrades")]
-        public string[] Upgrades { get; set; }
+        public string[]? Upgrades { get; set; }
 
         [JsonPropertyName("pingInterval")]
         public int PingInterval { get; set; }

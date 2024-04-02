@@ -84,7 +84,16 @@ public sealed class Engine : IDisposable
 
             foreach (var data in packets)
             {
-                var packet = Packet.Parse(data);
+                Packet packet;
+                try
+                {
+                    packet = Packet.Parse(data);
+                }
+                catch (Exception)
+                {
+                    // TODO: 
+                    continue;
+                }
 
                 // Handle heartbeat packet and yield the other packet types to the caller
                 if (packet.Type == PacketType.Ping)

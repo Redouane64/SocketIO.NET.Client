@@ -20,7 +20,9 @@ public sealed class Engine : IDisposable
     private readonly string _baseAddress;
     private readonly ClientOptions _clientOptions = new();
     private readonly HttpClient _httpClient;
-    private readonly ClientWebSocket _wsClient;
+    private readonly ClientWebSocket _webSocketClient;
+    private ITransport _transport;
+    
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
 
     private bool _connected;
@@ -36,11 +38,9 @@ public sealed class Engine : IDisposable
         _httpClient.Timeout = Timeout.InfiniteTimeSpan;
         _httpClient.DefaultRequestHeaders.ConnectionClose = false;
 
-        _wsClient = new ClientWebSocket();
+        _webSocketClient = new ClientWebSocket();
         _baseAddress = _clientOptions.Uri;
     }
-
-    internal ITransport Transport { get; private set; }
 
     public void Dispose()
     {
@@ -51,14 +51,14 @@ public sealed class Engine : IDisposable
 
     public async Task ConnectAsync()
     {
-        Transport = _httpTransport = new HttpPollingTransport(_httpClient);
+        _transport = _httpTransport = new HttpPollingTransport(_httpClient);
         await _httpTransport.ConnectAsync(_pollingCancellationTokenSource.Token);
 
         if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades!.Contains("websocket"))
         {
             _pollingCancellationTokenSource.Cancel();
             _pollingCancellationTokenSource.Dispose();
-            Transport = _wsTransport = new WebSocketTransport(_baseAddress, _httpTransport.Sid!, _wsClient);
+            _transport = _wsTransport = new WebSocketTransport(_baseAddress, _httpTransport.Sid!, _webSocketClient);
             await _wsTransport.ConnectAsync();
 
             _pollingCancellationTokenSource = new CancellationTokenSource();
@@ -81,7 +81,7 @@ public sealed class Engine : IDisposable
 
         while (!_pollingCancellationTokenSource.IsCancellationRequested)
         {
-            var packets = await Transport.GetAsync(_pollingCancellationTokenSource.Token);
+            var packets = await _transport.GetAsync(_pollingCancellationTokenSource.Token);
 
             foreach (var data in packets)
             {
@@ -95,7 +95,7 @@ public sealed class Engine : IDisposable
                 if (packet.Type == PacketType.Ping)
                 {
 #pragma warning disable CS4014
-                    Transport.SendAsync(Packet.PongPacket.ToPlaintextPacket(), PacketFormat.PlainText,
+                    _transport.SendAsync(Packet.PongPacket.ToPlaintextPacket(), PacketFormat.PlainText,
                         _pollingCancellationTokenSource.Token).ConfigureAwait(false);
 #pragma warning restore CS4014
                     continue;
@@ -126,7 +126,7 @@ public sealed class Engine : IDisposable
         }
 
         _pollingCancellationTokenSource.Cancel();
-        await Transport.Disconnect();
+        await _transport.Disconnect();
         _connected = false;
     }
 
@@ -163,7 +163,7 @@ public sealed class Engine : IDisposable
     public async Task SendAsync(string text, CancellationToken cancellationToken = default)
     {
         var packet = Packet.CreateMessagePacket(text).ToPlaintextPacket();
-        await Transport.SendAsync(packet, PacketFormat.PlainText, cancellationToken);
+        await _transport.SendAsync(packet, PacketFormat.PlainText, cancellationToken);
     }
 
     /// <summary>
@@ -174,6 +174,6 @@ public sealed class Engine : IDisposable
     public async Task SendAsync(ReadOnlyMemory<byte> binary, CancellationToken cancellationToken = default)
     {
         var packet = Packet.CreateBinaryPacket(binary).ToBinaryPacket(_base64Encoder);
-        await Transport.SendAsync(packet, PacketFormat.Binary, cancellationToken);
+        await _transport.SendAsync(packet, PacketFormat.Binary, cancellationToken);
     }
 }

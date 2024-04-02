@@ -87,7 +87,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         var packets = new Collection<ReadOnlyMemory<byte>>();
         var stream = new MemoryStream();
         var buffer = new byte[16];
-        var count = 0;
 
         try
         {

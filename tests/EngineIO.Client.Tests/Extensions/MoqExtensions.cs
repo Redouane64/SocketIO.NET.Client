@@ -2,7 +2,7 @@ using System.Net;
 using Moq;
 using Moq.Protected;
 
-namespace EngineIO.Client.UnitTests.Extensions;
+namespace EngineIO.Client.Tests.Extensions;
 
 public static class MoqExtensions
 {

@@ -1,8 +1,8 @@
 using System.Text;
 using EngineIO.Client.Packets;
-using EngineIO.Client.Transport;
+using EngineIO.Client.Transports;
 
-namespace EngineIO.Client.UnitTests.Packets;
+namespace EngineIO.Client.Tests.Packets;
 
 public class PacketTests
 {

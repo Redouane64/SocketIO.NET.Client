@@ -13,7 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngineIO.Client", "src\Engi
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{D8B5DE1E-C83F-40A9-9D27-D2FBB3866F0A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngineIO.Client.UnitTests", "tests\EngineIO.Client.UnitTests\EngineIO.Client.UnitTests.csproj", "{5D824F05-5793-4768-99DF-E4D993F16B75}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EngineIO.Client.Tests", "tests\EngineIO.Client.Tests\EngineIO.Client.Tests.csproj", "{5D824F05-5793-4768-99DF-E4D993F16B75}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleChat", "samples\SimpleChat\SimpleChat.csproj", "{B4E82A6E-FDDD-4A81-8907-34441E6FE745}"
 EndProject

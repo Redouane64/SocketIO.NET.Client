@@ -1,9 +1,9 @@
 using System.Text;
-using EngineIO.Client.Transport;
-using EngineIO.Client.UnitTests.Extensions;
+using EngineIO.Client.Tests.Extensions;
+using EngineIO.Client.Transports;
 using Moq;
 
-namespace EngineIO.Client.UnitTests.Transports;
+namespace EngineIO.Client.Tests.Transports;
 
 public class HttpPollingTransportTests
 {

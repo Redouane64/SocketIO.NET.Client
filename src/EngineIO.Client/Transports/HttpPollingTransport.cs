@@ -19,15 +19,17 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly byte _separator = 0x1E;
-
-    public bool Connected { get; private set; }
-    public string Path { get; private set; }
+    private bool _connected;
 
     public HttpPollingTransport(HttpClient httpClient)
     {
         _httpClient = httpClient;
         Path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }
+
+    public bool Connected { get; private set; }
+
+    public string Path { get; private set; }
 
     public string? Sid { get; private set; }
 
@@ -83,7 +85,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             var payload = new ReadOnlyMemory<byte>(data, start, data.Length - start);
             packets.Add(payload);
         }
-        
+
         return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
     }
 
@@ -100,7 +102,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             using var content = new ReadOnlyMemoryContent(packets);
             content.Headers.ContentType = format == PacketFormat.Binary
                 ? new MediaTypeHeaderValue("application/octet-stream")
-                : new MediaTypeHeaderValue("text/plain") {CharSet = Encoding.UTF8.WebName };
+                : new MediaTypeHeaderValue("text/plain") { CharSet = Encoding.UTF8.WebName };
 
             await _semaphore.WaitAsync(cancellationToken);
             using var response = await _httpClient.PostAsync(Path, content, cancellationToken);
@@ -108,7 +110,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
         catch (Exception e)
         {
-            // TODO:
+            throw;
         }
         finally
         {
@@ -132,17 +134,17 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         {
             throw new Exception("Unable to connect", exception);
         }
-        
+
         if (!Packet.TryParse(response[0], out var packet))
         {
             throw new Exception("Unexpected packet type");
         }
-        
+
         if (packet.Type != PacketType.Open)
         {
             throw new Exception("Unexpected packet type");
         }
-        
+
         var handshake = JsonSerializer
             .Deserialize<HandshakePacket>(packet.Body.Span);
 

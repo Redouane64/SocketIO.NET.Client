@@ -8,17 +8,18 @@ namespace EngineIO.Client.Packets;
 /// </summary>
 public readonly struct Packet
 {
-    public static readonly Packet OpenPacket = new Packet(PacketFormat.PlainText, PacketType.Open, Array.Empty<byte>());
+    public static readonly Packet OpenPacket = new(PacketFormat.PlainText, PacketType.Open, Array.Empty<byte>());
 
-    public static readonly Packet ClosePacket = new Packet(PacketFormat.PlainText, PacketType.Close, Array.Empty<byte>());
+    public static readonly Packet ClosePacket = new(PacketFormat.PlainText, PacketType.Close, Array.Empty<byte>());
 
-    public static readonly Packet PongPacket = new Packet(PacketFormat.PlainText, PacketType.Pong, Array.Empty<byte>());
+    public static readonly Packet PongPacket = new(PacketFormat.PlainText, PacketType.Pong, Array.Empty<byte>());
 
-    public static readonly Packet PingProbePacket = new Packet(PacketFormat.PlainText, PacketType.Ping, new [] {
+    public static readonly Packet PingProbePacket = new(PacketFormat.PlainText, PacketType.Ping, new[]
+    {
         (byte)'p', (byte)'r', (byte)'o', (byte)'b', (byte)'e'
     });
 
-    public static readonly Packet UpgradePacket = new Packet(PacketFormat.PlainText, PacketType.Upgrade, Array.Empty<byte>());
+    public static readonly Packet UpgradePacket = new(PacketFormat.PlainText, PacketType.Upgrade, Array.Empty<byte>());
 
     /// <summary>
     ///     Parse packet from raw payload.
@@ -35,7 +36,7 @@ public readonly struct Packet
             packet = default;
             return false;
         }
-        
+
         var content = data[1..];
         packet = new Packet(format, type, content);
         return true;

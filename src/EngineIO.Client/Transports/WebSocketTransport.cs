@@ -67,7 +67,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         {
             throw new Exception("Unexpected response from server");
         }
-        
+
         if (packet.Type != PacketType.Pong)
         {
             throw new Exception("Unexpected response from server");
@@ -100,8 +100,8 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                 result = await _client.ReceiveAsync(buffer, cancellationToken);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, String.Empty, CancellationToken.None);
-                    packets.Add(new [] { (byte)PacketType.Close });
+                    await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+                    packets.Add(new[] { (byte)PacketType.Close });
                     break;
                 }
 
@@ -114,7 +114,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         }
 
         stream.Seek(0, SeekOrigin.Begin);
-        
+
         packets.Add(stream.ToArray());
         return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
     }

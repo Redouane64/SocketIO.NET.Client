@@ -20,20 +20,20 @@ public sealed class Engine : IDisposable
     private readonly string _baseAddress;
     private readonly ClientOptions _clientOptions = new();
     private readonly HttpClient _httpClient;
-    private readonly ClientWebSocket _webSocketClient;
-    
+
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
+    private readonly ClientWebSocket _webSocketClient;
 
     private bool _connected;
     private HttpPollingTransport _httpTransport;
-    private WebSocketTransport _wsTransport;
-    private ITransport _transport;
 
     private CancellationTokenSource _pollingCancellationTokenSource = new();
+    private ITransport _transport;
+    private WebSocketTransport _wsTransport;
 
 #pragma warning disable CS8618
     public Engine(Action<ClientOptions> configure)
-#pragma warning restore CS8618 
+#pragma warning restore CS8618
     {
         configure(_clientOptions);
         _httpClient = new HttpClient();
@@ -136,10 +136,10 @@ public sealed class Engine : IDisposable
     /// <summary>
     ///     Listen for messages stream.
     /// </summary>
-    /// <param name="engine">EngineIO client instance</param>
     /// <param name="cancellationToken"></param>
     /// <returns>Packets</returns>
-    public async IAsyncEnumerable<Packet> ListenAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<Packet> ListenAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var reader = _packetsChannel.Reader;
         while (!cancellationToken.IsCancellationRequested)

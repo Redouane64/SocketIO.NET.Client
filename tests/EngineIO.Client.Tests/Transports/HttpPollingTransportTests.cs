@@ -11,16 +11,16 @@ public class HttpPollingTransportTests
     void Should_Create_Transport()
     {
         var transport = new HttpPollingTransport(new HttpClient());
-        
+
         Assert.Equal($"/engine.io?EIO=4&transport=polling", transport.Path);
         Assert.False(transport.Connected);
     }
-    
+
     [Fact]
     async Task Should_Parse_Concatenated_Packets()
     {
         var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
-        mockHttpMessageHandler.MockGetByteArrayAsync(new [] {
+        mockHttpMessageHandler.MockGetByteArrayAsync(new[] {
             (byte)'4',
             (byte)'H',
             (byte)'e',
@@ -51,12 +51,12 @@ public class HttpPollingTransportTests
         Assert.Equal("World", Encoding.UTF8.GetString(packets[2][1..].Span));
 
     }
-    
+
     [Fact]
     async Task Should_Parse_Single_Packet()
     {
         var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
-        mockHttpMessageHandler.MockGetByteArrayAsync(new [] {
+        mockHttpMessageHandler.MockGetByteArrayAsync(new[] {
             (byte)'4',
             (byte)'H',
             (byte)'e',
@@ -92,7 +92,7 @@ public class HttpPollingTransportTests
         );
 
         await transport.ConnectAsync(CancellationToken.None);
-        
+
         Assert.Equal(sid, transport.Sid);
         Assert.Equal(maxPayload, transport.MaxPayload);
         Assert.Equal(pingInterval, transport.PingInterval);

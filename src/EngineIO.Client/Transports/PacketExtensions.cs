@@ -2,7 +2,7 @@ using System;
 using System.Text;
 using EngineIO.Client.Packets;
 
-namespace EngineIO.Client.Transport;
+namespace EngineIO.Client.Transports;
 
 public static class PacketExtensions
 {

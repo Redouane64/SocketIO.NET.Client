@@ -10,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EngineIO.Client.Packets;
 
-namespace EngineIO.Client.Transport;
+namespace EngineIO.Client.Transports;
 
 public sealed class HttpPollingTransport : ITransport, IDisposable
 {

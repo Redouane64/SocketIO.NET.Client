@@ -1,0 +1,9 @@
+<Project>
+  <!-- See https://aka.ms/dotnet/msbuild/customize for more details on customizing your build -->
+  <PropertyGroup>
+      <ImplicitUsings>disable</ImplicitUsings>
+      <Nullable>enable</Nullable>
+      <RootNamespace>SocketIO.Client</RootNamespace>
+      <Langversion>12</Langversion>
+  </PropertyGroup>
+</Project>

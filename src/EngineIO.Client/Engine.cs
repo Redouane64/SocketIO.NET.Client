@@ -47,9 +47,9 @@ public sealed class Engine : IDisposable
 
     public void Dispose()
     {
-        _pollingCancellationTokenSource.Dispose();
-        _httpTransport.Dispose();
-        _wsTransport.Dispose();
+        _pollingCancellationTokenSource?.Dispose();
+        _httpTransport?.Dispose();
+        _wsTransport?.Dispose();
     }
 
     public async Task ConnectAsync()

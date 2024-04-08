@@ -69,13 +69,8 @@ public sealed class Engine : IDisposable
 
         _connected = true;
 #pragma warning disable CS4014
-        Task.Run(StartPolling, _pollingCancellationTokenSource.Token).ConfigureAwait(false);
+        Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014
-    }
-
-    private void StartPolling()
-    {
-        PollAsync().ConfigureAwait(false);
     }
 
     private async Task PollAsync()
@@ -99,7 +94,7 @@ public sealed class Engine : IDisposable
                 {
 #pragma warning disable CS4014
                     _transport.SendAsync(Packet.PongPacket.ToPlaintextPacket(), PacketFormat.PlainText,
-                        _pollingCancellationTokenSource.Token).ConfigureAwait(false);
+                        _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014
                     continue;
                 }
@@ -114,7 +109,7 @@ public sealed class Engine : IDisposable
                 if (packet.Type == PacketType.Message)
                 {
 #pragma warning disable CS4014
-                    writer.WriteAsync(packet, _pollingCancellationTokenSource.Token).ConfigureAwait(false);
+                    writer.WriteAsync(packet, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014
                 }
             }

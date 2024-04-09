@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -9,6 +10,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using EngineIO.Client.Packets;
+using EngineIO.Client.Transports.Exceptions;
 
 namespace EngineIO.Client.Transports;
 
@@ -60,7 +62,15 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         try
         {
             await _semaphore.WaitAsync(cancellationToken);
-            data = await _httpClient.GetByteArrayAsync(Path);
+            using var response = await _httpClient.GetAsync(Path, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await response.Content.ReadAsStreamAsync();
+                var error = await JsonSerializer.DeserializeAsync<BadRequestError>(message, cancellationToken: cancellationToken);
+                throw new BadRequestException(error!.Code, error.Message);
+            }
+
+            data = await response.Content.ReadAsByteArrayAsync();
         }
         finally
         {
@@ -106,11 +116,22 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
             await _semaphore.WaitAsync(cancellationToken);
             using var response = await _httpClient.PostAsync(Path, content, cancellationToken);
-            response.EnsureSuccessStatusCode();
-        }
-        catch (Exception e)
-        {
-            throw;
+            if (!response.IsSuccessStatusCode)
+            {
+                // TODO:
+
+                if (response.StatusCode == HttpStatusCode.BadRequest)
+                {
+                    var error = await JsonSerializer.DeserializeAsync<BadRequestError>(
+                        await response.Content.ReadAsStreamAsync(), cancellationToken: cancellationToken);
+
+                    throw new BadRequestException(error!.Code, error.Message);
+                }
+
+                // Throw any other an unexpected exception
+                response.EnsureSuccessStatusCode();
+            }
+            
         }
         finally
         {

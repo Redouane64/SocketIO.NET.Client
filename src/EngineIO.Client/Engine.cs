@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Net.Http;
 using System.Net.WebSockets;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transports;
+using EngineIO.Client.Transports.Exceptions;
 
 namespace EngineIO.Client;
 
@@ -79,13 +79,31 @@ public sealed class Engine : IDisposable
 
         while (!_pollingCancellationTokenSource.IsCancellationRequested)
         {
-            var packets = await _transport.GetAsync(_pollingCancellationTokenSource.Token);
+            ReadOnlyCollection<ReadOnlyMemory<byte>> packets;
+            try
+            {
+                packets = await _transport.GetAsync(_pollingCancellationTokenSource.Token);
+            }
+            catch (BadRequestException e)
+            {
+                writer.Complete(e);
+                return;
+            }
+            catch (WebSocketException e)
+            {
+                writer.Complete(e);
+                return;
+            }
+            catch (HttpRequestException e)
+            {
+                writer.Complete(e);
+                return;
+            }
 
             foreach (var data in packets)
             {
                 if (!Packet.TryParse(data, out var packet))
                 {
-                    Debug.WriteLine("polling encountered an invalid packet");
                     continue;
                 }
 
@@ -133,24 +151,10 @@ public sealed class Engine : IDisposable
     /// </summary>
     /// <param name="cancellationToken"></param>
     /// <returns>Packets</returns>
-    public async IAsyncEnumerable<Packet> ListenAsync(
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<Packet> ListenAsync(CancellationToken cancellationToken = default)
     {
         var reader = _packetsChannel.Reader;
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            Packet packet;
-            try
-            {
-                packet = await reader.ReadAsync(cancellationToken);
-            }
-            catch (ChannelClosedException)
-            {
-                yield break;
-            }
-
-            yield return packet;
-        }
+        return reader.ReadAllAsync(cancellationToken);
     }
 
     /// <summary>

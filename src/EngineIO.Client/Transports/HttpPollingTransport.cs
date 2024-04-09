@@ -21,7 +21,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly byte _separator = 0x1E;
-    private bool _connected;
 
     public HttpPollingTransport(HttpClient httpClient)
     {

@@ -39,13 +39,13 @@ public class PacketTests
     }
 
     [Theory(DisplayName = "Parse plain-text packets")]
-    [InlineData(PacketType.Open, new[] { (byte)PacketType.Open })]
+    [InlineData(PacketType.Open, new [] { (byte)PacketType.Open })]
     [InlineData(PacketType.Close, new[] { (byte)PacketType.Close })]
     [InlineData(PacketType.Ping, new[] { (byte)PacketType.Ping })]
     [InlineData(PacketType.Pong, new[] { (byte)PacketType.Pong })]
     [InlineData(PacketType.Message, new[] { (byte)PacketType.Message, (byte)'h', (byte)'i' })]
     [InlineData(PacketType.Upgrade, new[] { (byte)PacketType.Upgrade })]
-    void Parse_Should_Parse_Packet(PacketType expectedType, ReadOnlyMemory<byte> message)
+    void Parse_Should_Parse_Packet(PacketType expectedType, byte[] message)
     {
         var success = Packet.TryParse(message, out var packet);
         Assert.True(success);

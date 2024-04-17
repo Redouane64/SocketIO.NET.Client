@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Net;
@@ -64,9 +64,15 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             using var response = await _httpClient.GetAsync(Path, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
+                if (response.StatusCode == HttpStatusCode.BadRequest)
+                {
                 var message = await response.Content.ReadAsStreamAsync();
                 var error = await JsonSerializer.DeserializeAsync<BadRequestError>(message, cancellationToken: cancellationToken);
                 throw new BadRequestException(error!.Code, error.Message);
+            }
+
+                // throw on any other response error
+                response.EnsureSuccessStatusCode();
             }
 
             data = await response.Content.ReadAsByteArrayAsync();

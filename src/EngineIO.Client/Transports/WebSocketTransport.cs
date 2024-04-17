@@ -15,17 +15,22 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _receiveSemaphore = new(1, 1);
     private readonly SemaphoreSlim _sendSemaphore = new(1, 1);
-    private readonly string _sid;
-
     private readonly Uri _uri;
-
-    private bool _connected;
 
     public WebSocketTransport(string baseAddress, string sid, ClientWebSocket client)
     {
-        _client = client;
-        _sid = sid ?? throw new ArgumentException("Sid is missing");
+        if (string.IsNullOrEmpty(baseAddress))
+        {
+            throw new ArgumentException("base address cannot be null or empty.", nameof(baseAddress));
+        }
 
+        if (string.IsNullOrEmpty(sid))
+        {
+            throw new ArgumentException("Sid cannot be null or empty.", nameof(sid));
+        }
+
+        _client = client;
+        
         if (baseAddress.StartsWith(Uri.UriSchemeHttp))
         {
             baseAddress = baseAddress.Replace("http://", "ws://");
@@ -49,9 +54,11 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     public string Name => "websocket";
 
+    public bool Connected { get; private set; }
+
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        if (_connected)
+        if (Connected)
         {
             return;
         }
@@ -76,7 +83,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         // upgrade
         await SendAsync(Packet.UpgradePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
 
-        _connected = true;
+        Connected = true;
     }
 
     public Task Disconnect()
@@ -122,7 +129,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
         CancellationToken cancellationToken = default)
     {
-        if (_client.State == WebSocketState.Closed)
+        if (_client.State == WebSocketState.Closed || _client.State == WebSocketState.Aborted)
         {
             throw new Exception("Connection closed unexpectedly");
         }
@@ -131,6 +138,10 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         {
             await _sendSemaphore.WaitAsync(CancellationToken.None);
             await _client.SendAsync(packets, WebSocketMessageType.Text, true, cancellationToken);
+        }
+        catch (Exception e)
+        {
+            throw;
         }
         finally
         {

@@ -109,7 +109,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     {
         if (!Connected)
         {
-            throw new Exception("Transport is not connected");
+            throw new InvalidOperationException("Transport is not connected");
         }
 
         try
@@ -154,19 +154,19 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         {
             response = await GetAsync(cancellationToken);
         }
-        catch (Exception exception)
+        catch (Exception)
         {
-            throw new Exception("Unable to connect", exception);
+            throw new TransportException("Unable to connect");
         }
 
         if (!Packet.TryParse(response[0], out var packet))
         {
-            throw new Exception("Unexpected packet type");
+            throw new TransportException("Unexpected packet type");
         }
 
         if (packet.Type != PacketType.Open)
         {
-            throw new Exception("Unexpected packet type");
+            throw new TransportException("Unexpected packet type");
         }
 
         var handshake = JsonSerializer

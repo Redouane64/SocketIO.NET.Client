@@ -5,6 +5,7 @@ using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
 using EngineIO.Client.Packets;
+using EngineIO.Client.Transports.Exceptions;
 
 namespace EngineIO.Client.Transports;
 
@@ -72,12 +73,12 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         var data = await GetAsync(cancellationToken);
         if (!Packet.TryParse(data[0], out var packet))
         {
-            throw new Exception("Unexpected response from server");
+            throw new TransportException("Unexpected response from server");
         }
 
         if (packet.Type != PacketType.Pong)
         {
-            throw new Exception("Unexpected response from server");
+            throw new TransportException("Unexpected response from server");
         }
 
         // upgrade
@@ -131,7 +132,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     {
         if (_client.State == WebSocketState.Closed || _client.State == WebSocketState.Aborted)
         {
-            throw new Exception("Connection closed unexpectedly");
+            throw new TransportException("Connection closed unexpectedly");
         }
 
         try

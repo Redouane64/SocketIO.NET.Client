@@ -30,7 +30,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         }
 
         _client = client;
-        
+
         if (baseAddress.StartsWith(Uri.UriSchemeHttp))
         {
             baseAddress = baseAddress.Replace("http://", "ws://");

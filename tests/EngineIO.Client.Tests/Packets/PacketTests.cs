@@ -39,7 +39,7 @@ public class PacketTests
     }
 
     [Theory(DisplayName = "Parse plain-text packets")]
-    [InlineData(PacketType.Open, new [] { (byte)PacketType.Open })]
+    [InlineData(PacketType.Open, new[] { (byte)PacketType.Open })]
     [InlineData(PacketType.Close, new[] { (byte)PacketType.Close })]
     [InlineData(PacketType.Ping, new[] { (byte)PacketType.Ping })]
     [InlineData(PacketType.Pong, new[] { (byte)PacketType.Pong })]

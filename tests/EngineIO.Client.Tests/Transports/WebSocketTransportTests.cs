@@ -12,6 +12,6 @@ public sealed class WebSocketTransportTests
         var sid = "1NkM2QzZGMjEyMTIxCg";
         var client = new ClientWebSocket();
         var transport = new WebSocketTransport(baseAddress, sid, client);
-        Assert.False(transport.Connected);    
+        Assert.False(transport.Connected);
     }
 }

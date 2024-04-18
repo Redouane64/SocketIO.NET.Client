@@ -134,7 +134,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 // Throw any other an unexpected exception
                 response.EnsureSuccessStatusCode();
             }
-            
+
         }
         finally
         {

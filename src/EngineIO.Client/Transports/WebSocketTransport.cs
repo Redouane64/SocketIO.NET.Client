@@ -139,7 +139,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             await _sendSemaphore.WaitAsync(CancellationToken.None);
             await _client.SendAsync(packets, WebSocketMessageType.Text, true, cancellationToken);
         }
-        catch (Exception e)
+        catch (Exception)
         {
             throw;
         }

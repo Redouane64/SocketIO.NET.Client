@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Net;
@@ -66,10 +66,10 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             {
                 if (response.StatusCode == HttpStatusCode.BadRequest)
                 {
-                var message = await response.Content.ReadAsStreamAsync();
-                var error = await JsonSerializer.DeserializeAsync<BadRequestError>(message, cancellationToken: cancellationToken);
-                throw new BadRequestException(error!.Code, error.Message);
-            }
+                    var message = await response.Content.ReadAsStreamAsync();
+                    var error = await JsonSerializer.DeserializeAsync<BadRequestError>(message, cancellationToken: cancellationToken);
+                    throw new BadRequestException(error!.Code, error.Message!);
+                }
 
                 // throw on any other response error
                 response.EnsureSuccessStatusCode();
@@ -123,14 +123,12 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             using var response = await _httpClient.PostAsync(Path, content, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                // TODO:
-
                 if (response.StatusCode == HttpStatusCode.BadRequest)
                 {
                     var error = await JsonSerializer.DeserializeAsync<BadRequestError>(
                         await response.Content.ReadAsStreamAsync(), cancellationToken: cancellationToken);
 
-                    throw new BadRequestException(error!.Code, error.Message);
+                    throw new BadRequestException(error!.Code, error.Message!);
                 }
 
                 // Throw any other an unexpected exception

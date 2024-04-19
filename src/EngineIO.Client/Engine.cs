@@ -64,6 +64,7 @@ public sealed class Engine : IDisposable
             try
             { 
                 await _httpTransport.ConnectAsync(_pollingCancellationTokenSource.Token);
+                break;
             }
             catch
             {

@@ -9,8 +9,10 @@ const server = engine.attach(httpServer, {
   cors: {
     origin: '*'
   },
+  
   pingInterval: 300,
   pingTimeout: 200,
+  
   transports: ['polling', "websocket"],
   allowUpgrades: true,
 });
@@ -31,7 +33,7 @@ server.on('connection', socket => {
   });
   
   socket.on('message', data => { 
-    console.log(`[Client] ${data}`);
+    console.log(`[Client] ${new Date().toISOString()} ${data}`);
     socket.send(data);
   });
   

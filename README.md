@@ -2,11 +2,15 @@
 
 Socket.IO .NET Client is an experimental project aims to implement Socket.IO protocol using modern .NET platform features.
 
+Unlike other existing clients which uses events and delegates, This implementation's goal is to use .NET Task-based asynchronous programming techniques.
+
+The client implements `Engine.IO` and `Socket.IO` core protocols.
+
 ## Tasks
 - **Engine.IO Client**
 
 - [x] Http Polling transport
-- [x] Implement basic Websocket transport
+- [x] Basic Websocket transport
 - [x] Send/Receiving plain text and Binary packets
 - [ ] Retry and transport fallback
 - [ ] Packet buffing

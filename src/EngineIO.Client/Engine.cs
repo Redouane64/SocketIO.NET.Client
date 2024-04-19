@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Net.WebSockets;
@@ -20,16 +21,18 @@ public sealed class Engine : IDisposable
     private readonly string _baseAddress;
     private readonly ClientOptions _clientOptions = new();
     private readonly HttpClient _httpClient;
-
+    
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
     private readonly ClientWebSocket _webSocketClient;
-
-    private bool _connected;
-    private HttpPollingTransport _httpTransport;
-
+    
     private CancellationTokenSource _pollingCancellationTokenSource = new();
+    
+    private HttpPollingTransport _httpTransport;
     private ITransport _transport;
     private WebSocketTransport _wsTransport;
+
+    private int _retryCount = 0, _maxRetryCount = 3;
+    private bool _errored = false;
 
 #pragma warning disable CS8618
     public Engine(Action<ClientOptions> configure)
@@ -47,15 +50,35 @@ public sealed class Engine : IDisposable
 
     public void Dispose()
     {
-        _pollingCancellationTokenSource?.Dispose();
-        _httpTransport?.Dispose();
-        _wsTransport?.Dispose();
+        _pollingCancellationTokenSource.Dispose();
+        _httpTransport.Dispose();
+        _wsTransport.Dispose();
     }
 
     public async Task ConnectAsync()
     {
         _transport = _httpTransport = new HttpPollingTransport(_httpClient);
-        await _httpTransport.ConnectAsync(_pollingCancellationTokenSource.Token);
+
+        while (_retryCount <= _maxRetryCount)
+        {
+            try
+            { 
+                await _httpTransport.ConnectAsync(_pollingCancellationTokenSource.Token);
+            }
+            catch
+            {
+                Debug.WriteLine("Connection error, retrying...");
+                Interlocked.Increment(ref _retryCount);
+                _errored = true;
+            }
+
+            await Task.Delay(_retryCount * 1000);
+        }
+
+        if (_errored)
+        {
+            throw new Exception("Unable to connecto the remote server");
+        }
 
         if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades!.Contains("websocket"))
         {
@@ -67,7 +90,6 @@ public sealed class Engine : IDisposable
             _pollingCancellationTokenSource = new CancellationTokenSource();
         }
 
-        _connected = true;
 #pragma warning disable CS4014
         Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014
@@ -84,19 +106,10 @@ public sealed class Engine : IDisposable
             {
                 packets = await _transport.GetAsync(_pollingCancellationTokenSource.Token);
             }
-            catch (BadRequestException e)
+            catch (Exception e)
             {
                 writer.Complete(e);
-                return;
-            }
-            catch (WebSocketException e)
-            {
-                writer.Complete(e);
-                return;
-            }
-            catch (HttpRequestException e)
-            {
-                writer.Complete(e);
+                HandleException(e);
                 return;
             }
 
@@ -134,16 +147,28 @@ public sealed class Engine : IDisposable
         }
     }
 
-    public async Task DisconnectAsync()
+    private void HandleException(Exception exception)
     {
-        if (!_connected)
+        if (exception is TransportException transportException)
         {
-            return;
+            // TODO: handle this
         }
 
+        if (exception is WebSocketException webSocketException)
+        {
+            // TODO: handle this
+        }
+
+        if (exception is HttpRequestException requestException)
+        {
+            // TODO: handle this
+        }
+    }
+
+    public async Task DisconnectAsync()
+    {
         _pollingCancellationTokenSource.Cancel();
         await _transport.Disconnect();
-        _connected = false;
     }
 
     /// <summary>

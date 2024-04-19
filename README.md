@@ -5,14 +5,11 @@ Socket.IO .NET Client is an experimental project aims to implement Socket.IO pro
 ## Tasks
 - **Engine.IO Client**
 
-- [x] Implement basic Http Polling transport
-- [x] Implement send/receiving plain text and Binary packets
-- [ ] Implement polling heartbeat timeout tracking mechanism
-- [ ] Implement connection and polling retry
-- [ ] Implement send packet buffering when send fails 
+- [x] Http Polling transport
 - [x] Implement basic Websocket transport
-- [ ] Implement transport fallback mechanism
-- [ ] Add tests
+- [x] Send/Receiving plain text and Binary packets
+- [ ] Retry and transport fallback
+- [ ] Packet buffing
 
 - **Socket.IO Client**
 

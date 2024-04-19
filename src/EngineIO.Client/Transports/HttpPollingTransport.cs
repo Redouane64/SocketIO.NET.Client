@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -22,13 +21,13 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly byte _separator = 0x1E;
 
+    private bool _open = false;
+
     public HttpPollingTransport(HttpClient httpClient)
     {
         _httpClient = httpClient;
         Path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }
-
-    public bool Connected { get; private set; }
 
     public string Path { get; private set; }
 
@@ -47,11 +46,18 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _httpClient.Dispose();
         _semaphore.Dispose();
     }
-
+    
     public string Name => "polling";
+
+    public void Close() => _open = false;
 
     public async Task Disconnect()
     {
+        if (!_open)
+        {
+            return;
+        }
+
         await SendAsync(Packet.ClosePacket.ToPlaintextPacket(), PacketFormat.PlainText);
     }
 
@@ -62,19 +68,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         {
             await _semaphore.WaitAsync(cancellationToken);
             using var response = await _httpClient.GetAsync(Path, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                if (response.StatusCode == HttpStatusCode.BadRequest)
-                {
-                    var message = await response.Content.ReadAsStreamAsync();
-                    var error = await JsonSerializer.DeserializeAsync<BadRequestError>(message, cancellationToken: cancellationToken);
-                    throw new BadRequestException(error!.Code, error.Message!);
-                }
-
-                // throw on any other response error
-                response.EnsureSuccessStatusCode();
-            }
-
+            response.EnsureSuccessStatusCode();
             data = await response.Content.ReadAsByteArrayAsync();
         }
         finally
@@ -107,11 +101,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
         CancellationToken cancellationToken = default)
     {
-        if (!Connected)
-        {
-            throw new InvalidOperationException("Transport is not connected");
-        }
-
         try
         {
             using var content = new ReadOnlyMemoryContent(packets);
@@ -121,20 +110,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
             await _semaphore.WaitAsync(cancellationToken);
             using var response = await _httpClient.PostAsync(Path, content, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                if (response.StatusCode == HttpStatusCode.BadRequest)
-                {
-                    var error = await JsonSerializer.DeserializeAsync<BadRequestError>(
-                        await response.Content.ReadAsStreamAsync(), cancellationToken: cancellationToken);
-
-                    throw new BadRequestException(error!.Code, error.Message!);
-                }
-
-                // Throw any other an unexpected exception
-                response.EnsureSuccessStatusCode();
-            }
-
+            response.EnsureSuccessStatusCode();
         }
         finally
         {
@@ -144,44 +120,34 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        if (Connected)
+        if (_open)
         {
             return;
         }
 
-        ReadOnlyCollection<ReadOnlyMemory<byte>> response;
-        try
-        {
-            response = await GetAsync(cancellationToken);
-        }
-        catch (Exception)
-        {
-            throw new TransportException("Unable to connect");
-        }
+        ReadOnlyCollection<ReadOnlyMemory<byte>> response = await GetAsync(cancellationToken);
 
         if (!Packet.TryParse(response[0], out var packet))
         {
-            throw new TransportException("Unexpected packet type");
+            throw new TransportException(ErrorReason.InvalidPacket);
         }
 
         if (packet.Type != PacketType.Open)
         {
-            throw new TransportException("Unexpected packet type");
+            throw new TransportException(ErrorReason.InvalidPacket);
         }
 
         var handshake = JsonSerializer
             .Deserialize<HandshakePacket>(packet.Body.Span);
 
-#pragma warning disable CS8602
-        Sid = handshake.Sid;
-#pragma warning restore CS8602
+        Sid = handshake!.Sid;
         MaxPayload = handshake.MaxPayload;
         PingInterval = handshake.PingInterval;
         PingTimeout = handshake.PingTimeout;
         Upgrades = handshake.Upgrades;
 
         Path += $"&sid={Sid}";
-        Connected = true;
+        _open = true;
     }
 
     private class HandshakePacket

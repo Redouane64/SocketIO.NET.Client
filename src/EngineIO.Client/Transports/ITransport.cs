@@ -20,6 +20,8 @@ public interface ITransport
     /// <returns></returns>
     Task ConnectAsync(CancellationToken cancellationToken = default);
 
+    void Close();
+
     Task Disconnect();
 
     /// <summary>

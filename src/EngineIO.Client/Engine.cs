@@ -120,7 +120,7 @@ public sealed class Engine : IDisposable
                 if (packet.Type == PacketType.Close)
                 {
                     writer.Complete();
-                    await DisconnectAsync();
+                    _transport.Close();
                     break;
                 }
 

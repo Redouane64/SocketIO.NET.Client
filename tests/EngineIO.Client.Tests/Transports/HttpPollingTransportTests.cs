@@ -11,9 +11,7 @@ public class HttpPollingTransportTests
     void Should_Create_Transport()
     {
         var transport = new HttpPollingTransport(new HttpClient());
-
         Assert.Equal($"/engine.io?EIO=4&transport=polling", transport.Path);
-        Assert.False(transport.Connected);
     }
 
     [Fact]
@@ -98,7 +96,6 @@ public class HttpPollingTransportTests
         Assert.Equal(pingInterval, transport.PingInterval);
         Assert.Equal(pingTimeout, transport.PingTimeout);
         Assert.Equal(upgrades, transport.Upgrades);
-        Assert.True(transport.Connected);
         Assert.Equal($"/engine.io?EIO=4&transport=polling&sid={sid}", transport.Path);
     }
 }

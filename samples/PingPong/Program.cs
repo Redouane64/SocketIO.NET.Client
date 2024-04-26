@@ -2,8 +2,9 @@
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+
 using EngineIO.Client;
-using EngineIO.Client.Extensions;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 
@@ -39,7 +40,7 @@ internal class Program
 
         await engine.ConnectAsync();
 
-
+        /*
         Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
@@ -48,6 +49,7 @@ internal class Program
                 await engine.SendAsync("Hello from client!!");
             }
         });
+        */
 
         await foreach (var packet in engine.ListenAsync(cts.Token))
         {

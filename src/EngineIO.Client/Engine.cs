@@ -8,6 +8,7 @@ using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transports;
 using EngineIO.Client.Transports.Exceptions;
@@ -21,17 +22,17 @@ public sealed class Engine : IDisposable
     private readonly string _baseAddress;
     private readonly ClientOptions _clientOptions = new();
     private readonly HttpClient _httpClient;
-    
+
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
     private readonly ClientWebSocket _webSocketClient;
-    
+
     private CancellationTokenSource _pollingCancellationTokenSource = new();
-    
+
     private HttpPollingTransport _httpTransport;
     private ITransport _transport;
     private WebSocketTransport _wsTransport;
-
-    private int _retryCount = 0, _maxRetryCount = 3;
+    private int _retryCount = 0;
+    private readonly int _maxRetryCount = 3;
     private bool _errored = false;
 
 #pragma warning disable CS8618
@@ -62,7 +63,7 @@ public sealed class Engine : IDisposable
         while (_retryCount <= _maxRetryCount)
         {
             try
-            { 
+            {
                 await _httpTransport.ConnectAsync(_pollingCancellationTokenSource.Token);
                 break;
             }
@@ -81,7 +82,7 @@ public sealed class Engine : IDisposable
             throw new Exception("Unable to connecto the remote server");
         }
 
-        if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades!.Contains("websocket"))
+        if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades.Contains("websocket"))
         {
             _pollingCancellationTokenSource.Cancel();
             _pollingCancellationTokenSource.Dispose();

@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transports.Exceptions;
 
@@ -21,7 +22,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly byte _separator = 0x1E;
 
-    private bool _open = false;
+    private bool _open;
 
     public HttpPollingTransport(HttpClient httpClient)
     {
@@ -32,13 +33,9 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public string Path { get; private set; }
 
     public string? Sid { get; private set; }
-
     public string[]? Upgrades { get; private set; }
-
     public int PingInterval { get; private set; }
-
     public int PingTimeout { get; private set; }
-
     public int MaxPayload { get; private set; }
 
     public void Dispose()
@@ -46,7 +43,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         _httpClient.Dispose();
         _semaphore.Dispose();
     }
-    
+
     public string Name => "polling";
 
     public void Close() => _open = false;
@@ -138,9 +135,9 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
 
         var handshake = JsonSerializer
-            .Deserialize<HandshakePacket>(packet.Body.Span);
+            .Deserialize<HandshakePacket>(packet.Body.Span)!;
 
-        Sid = handshake!.Sid;
+        Sid = handshake.Sid;
         MaxPayload = handshake.MaxPayload;
         PingInterval = handshake.PingInterval;
         PingTimeout = handshake.PingTimeout;

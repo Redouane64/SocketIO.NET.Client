@@ -1,6 +1,8 @@
 using System.Text;
+
 using EngineIO.Client.Tests.Extensions;
 using EngineIO.Client.Transports;
+
 using Moq;
 
 namespace EngineIO.Client.Tests.Transports;

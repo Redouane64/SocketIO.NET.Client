@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+
 using EngineIO.Client.Transports;
 
 namespace EngineIO.Client.Tests.Transports;

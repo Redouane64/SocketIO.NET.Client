@@ -1,4 +1,5 @@
 using System.Text;
+
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transports;
 

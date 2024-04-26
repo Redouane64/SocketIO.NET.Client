@@ -4,6 +4,7 @@ using System.IO;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
+
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transports.Exceptions;
 
@@ -54,7 +55,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _receiveSemaphore.Dispose();
         _sendSemaphore.Dispose();
     }
-    
+
     public string Name => "websocket";
 
     public void Close() => _open = false;

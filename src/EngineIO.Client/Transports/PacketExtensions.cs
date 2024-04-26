@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+
 using EngineIO.Client.Packets;
 
 namespace EngineIO.Client.Transports;

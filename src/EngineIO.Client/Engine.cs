@@ -4,7 +4,9 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -30,7 +32,7 @@ public sealed class Engine : IDisposable
 
     private HttpPollingTransport _httpTransport;
     private ITransport _transport;
-    private WebSocketTransport _wsTransport;
+    private WebSocketTransport? _wsTransport;
     private int _retryCount = 0;
     private readonly int _maxRetryCount = 3;
     private bool _errored = false;
@@ -53,7 +55,7 @@ public sealed class Engine : IDisposable
     {
         _pollingCancellationTokenSource.Dispose();
         _httpTransport.Dispose();
-        _wsTransport.Dispose();
+        _wsTransport?.Dispose();
     }
 
     public async Task ConnectAsync()
@@ -110,7 +112,8 @@ public sealed class Engine : IDisposable
             }
             catch (Exception e)
             {
-                writer.Complete(e);
+                writer.Complete();
+                _transport.Close();
                 HandleException(e);
                 return;
             }
@@ -162,6 +165,11 @@ public sealed class Engine : IDisposable
         }
 
         if (exception is HttpRequestException requestException)
+        {
+            // TODO: handle this
+        }
+
+        if (exception is SocketException)
         {
             // TODO: handle this
         }

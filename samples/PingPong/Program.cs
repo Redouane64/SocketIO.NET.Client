@@ -31,7 +31,7 @@ internal class Program
         {
             options.Uri = "http://127.0.0.1:9854";
             options.AutoUpgrade = false;
-        });
+        }, loggerFactory);
 
         Console.CancelKeyPress += async (sender, eventArgs) =>
         {
@@ -58,6 +58,7 @@ internal class Program
         }
 
         await engine.DisconnectAsync();
+        Console.ReadKey();
     }
 
 }

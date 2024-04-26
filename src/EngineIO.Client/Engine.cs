@@ -15,6 +15,8 @@ using EngineIO.Client.Packets;
 using EngineIO.Client.Transports;
 using EngineIO.Client.Transports.Exceptions;
 
+using Microsoft.Extensions.Logging;
+
 namespace EngineIO.Client;
 
 public sealed class Engine : IDisposable
@@ -24,6 +26,7 @@ public sealed class Engine : IDisposable
     private readonly string _baseAddress;
     private readonly ClientOptions _clientOptions = new();
     private readonly HttpClient _httpClient;
+    private readonly ILogger<Engine> logger;
 
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
     private readonly ClientWebSocket _webSocketClient;
@@ -38,7 +41,7 @@ public sealed class Engine : IDisposable
     private bool _errored = false;
 
 #pragma warning disable CS8618
-    public Engine(Action<ClientOptions> configure)
+    public Engine(Action<ClientOptions> configure, ILoggerFactory? loggerFactory = null)
 #pragma warning restore CS8618
     {
         configure(_clientOptions);
@@ -49,6 +52,11 @@ public sealed class Engine : IDisposable
 
         _webSocketClient = new ClientWebSocket();
         _baseAddress = _clientOptions.Uri;
+
+        if (loggerFactory is not null)
+        {
+            this.logger = loggerFactory.CreateLogger<Engine>();
+        }
     }
 
     public void Dispose()
@@ -154,6 +162,8 @@ public sealed class Engine : IDisposable
 
     private void HandleException(Exception exception)
     {
+        logger.LogError(exception.Message);
+
         if (exception is TransportException transportException)
         {
             // TODO: handle this
@@ -165,11 +175,6 @@ public sealed class Engine : IDisposable
         }
 
         if (exception is HttpRequestException requestException)
-        {
-            // TODO: handle this
-        }
-
-        if (exception is SocketException)
         {
             // TODO: handle this
         }

@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Net.Http;
-using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
@@ -19,19 +17,13 @@ namespace EngineIO.Client;
 public sealed class Engine : IDisposable
 {
     private readonly IEncoder _base64Encoder = new Base64Encoder();
-
-    private readonly string _baseAddress;
     private readonly ClientOptions _clientOptions = new();
-    private readonly HttpClient _httpClient;
     private readonly ILogger<Engine> _logger;
-    
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
-    private readonly ClientWebSocket _webSocketClient;
+    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
 
-    private CancellationTokenSource _pollingCancellationTokenSource = new();
-
-    private HttpPollingTransport _httpTransport;
     private ITransport _transport;
+    private HttpPollingTransport _httpTransport;
     private WebSocketTransport? _wsTransport;
 
 #pragma warning disable CS8618
@@ -39,14 +31,6 @@ public sealed class Engine : IDisposable
 #pragma warning restore CS8618
     {
         configure(_clientOptions);
-        _httpClient = new HttpClient();
-        _httpClient.BaseAddress = new Uri(_clientOptions.Uri);
-        _httpClient.Timeout = Timeout.InfiniteTimeSpan;
-        _httpClient.DefaultRequestHeaders.ConnectionClose = false;
-
-        _webSocketClient = new ClientWebSocket();
-        _baseAddress = _clientOptions.Uri;
-
         if (loggerFactory is not null)
         {
             this._logger = loggerFactory.CreateLogger<Engine>();
@@ -64,7 +48,7 @@ public sealed class Engine : IDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        _transport = _httpTransport = new HttpPollingTransport(_httpClient);
+        _transport = _httpTransport = new HttpPollingTransport(_clientOptions.BaseAddress);
         try
         {
             await _httpTransport.ConnectAsync(cancellationToken);
@@ -79,12 +63,8 @@ public sealed class Engine : IDisposable
         {
             try
             {
-                _pollingCancellationTokenSource.Cancel();
-                _pollingCancellationTokenSource.Dispose();
-                _transport = _wsTransport = new WebSocketTransport(_baseAddress, _httpTransport.Sid!, _webSocketClient);
+                _transport = _wsTransport = new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!);
                 await _wsTransport.ConnectAsync(cancellationToken);
-
-                _pollingCancellationTokenSource = new CancellationTokenSource();
             }
             catch (Exception exception)
             {

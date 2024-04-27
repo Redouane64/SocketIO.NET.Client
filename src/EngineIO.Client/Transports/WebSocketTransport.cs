@@ -21,7 +21,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     private bool _open = false;
 
-    public WebSocketTransport(string baseAddress, string sid, ClientWebSocket client)
+    public WebSocketTransport(string baseAddress, string sid)
     {
         if (string.IsNullOrEmpty(baseAddress))
         {
@@ -33,7 +33,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             throw new ArgumentException("Sid cannot be null or empty.", nameof(sid));
         }
 
-        _client = client;
+        _client = new ClientWebSocket();
 
         if (baseAddress.StartsWith(Uri.UriSchemeHttp))
         {

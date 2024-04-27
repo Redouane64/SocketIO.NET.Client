@@ -5,8 +5,7 @@ public class ClientOptions
     /// <summary>
     ///     Engine.io server Uri.
     /// </summary>
-#nullable disable
-    public string Uri { get; set; }
+    public string BaseAddress { get; set; } = null!;
 
     /// <summary>
     ///     Flag indicating whether client should automatically update from HTTP polling to websocket transport.

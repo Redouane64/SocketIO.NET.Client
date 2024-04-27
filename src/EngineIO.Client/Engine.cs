@@ -4,13 +4,13 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Net.Http;
 using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transports;
-using EngineIO.Client.Transports.Exceptions;
 
 using Microsoft.Extensions.Logging;
 
@@ -53,6 +53,8 @@ public sealed class Engine : IDisposable
         }
     }
 
+    public bool Connected { get; private set; }
+
     public void Dispose()
     {
         _pollingCancellationTokenSource.Dispose();
@@ -62,43 +64,6 @@ public sealed class Engine : IDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        var (connected, exception) = await TryConnect(cancellationToken);
-        if (connected)
-        {
-            return;
-        }
-        
-        if (!_clientOptions.AutoReconnect)
-        {
-            if (!connected)
-            {
-                throw exception!;
-            }
-        }
-        
-        int retryCount = 0;
-        while (retryCount < _clientOptions.MaxConnectionRetry)
-        {
-            (connected, exception) = await TryConnect();
-            if (connected)
-            {
-                break;
-            }
-            
-            this._logger.LogError(exception!.Message);
-            Interlocked.Increment(ref retryCount);
-            
-            await Task.Delay(retryCount * 1000, cancellationToken);
-        }
-        
-        if (!connected)
-        {
-            this._logger.LogError("Unable to establish connection to the remote server: {Message}", exception!.Message);
-        }
-    }
-
-    private async Task<(bool, Exception?)> TryConnect(CancellationToken cancellationToken = default)
-    {
         _transport = _httpTransport = new HttpPollingTransport(_httpClient);
         try
         {
@@ -106,7 +71,8 @@ public sealed class Engine : IDisposable
         }
         catch (Exception exception)
         {
-            return (false, exception);
+            HandleException(exception);
+            return;
         }
 
         if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades!.Contains("websocket"))
@@ -120,16 +86,17 @@ public sealed class Engine : IDisposable
 
                 _pollingCancellationTokenSource = new CancellationTokenSource();
             }
-            catch(Exception exception)
+            catch (Exception exception)
             {
-                return (false, exception);
+                HandleException(exception);
+                return;
             }
         }
 
 #pragma warning disable CS4014
         Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014
-        return (true, null);
+        Connected = true;
     }
 
     private async Task PollAsync()
@@ -187,20 +154,8 @@ public sealed class Engine : IDisposable
 
     private void HandleException(Exception exception)
     {
-        if (exception is TransportException transportException)
-        {
-            // TODO: handle this
-        }
-
-        if (exception is WebSocketException webSocketException)
-        {
-            
-        }
-
-        if (exception is HttpRequestException requestException)
-        {
-            
-        }
+        _logger.LogError(exception, exception.Message);
+        // TODO: clean up
     }
 
     public async Task DisconnectAsync()
@@ -210,14 +165,25 @@ public sealed class Engine : IDisposable
     }
 
     /// <summary>
-    ///     Listen for messages stream.
+    ///     Listen for incoming packets.
     /// </summary>
-    /// <param name="cancellationToken"></param>
+    /// <param name="cancellationToken">IAsyncEnumerable cancellation token</param>
     /// <returns>Packets</returns>
-    public IAsyncEnumerable<Packet> ListenAsync(CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<Packet> ListenAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (!Connected)
+        {
+            yield break;
+        }
+        
         var reader = _packetsChannel.Reader;
-        return reader.ReadAllAsync(cancellationToken);
+        while (await reader.WaitToReadAsync(cancellationToken))
+        {
+            while (reader.TryRead(out var packet))
+            {
+                yield return packet;
+            }
+        }
     }
 
     /// <summary>

@@ -17,4 +17,14 @@ public class ClientOptions
     ///     Enable or disable packet buffering.
     /// </summary>
     public bool Buffering { get; set; }
+
+    /// <summary>
+    ///     Indicate whether the client should reconnect automatically when connection is lost.
+    /// </summary>
+    public bool AutoReconnect { get; set; } = true;
+
+    /// <summary>
+    ///     Maximum retry count before connection retry stops. Default value is 3.
+    /// </summary>
+    public int MaxConnectionRetry { get; set; } = 3;
 }

@@ -38,7 +38,7 @@ internal class Program
             await cts.CancelAsync();
         };
 
-        await engine.ConnectAsync();
+        await engine.ConnectAsync(cts.Token);
 
         /*
         Task.Run(async () =>

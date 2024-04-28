@@ -22,7 +22,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly byte _separator = 0x1E;
 
-    private bool _open;
+    private bool _connected;
 
     public HttpPollingTransport(string baseAddress)
     {
@@ -49,16 +49,16 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     public string Name => "polling";
 
-    public void Close() => _open = false;
+    public bool Connected => _connected = false;
 
     public async Task Disconnect()
     {
-        if (!_open)
+        if (_connected)
         {
-            return;
+            await SendAsync(Packet.ClosePacket.ToPlaintextPacket(), PacketFormat.PlainText);
         }
 
-        await SendAsync(Packet.ClosePacket.ToPlaintextPacket(), PacketFormat.PlainText);
+        _connected = false;
     }
 
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
@@ -120,7 +120,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        if (_open)
+        if (_connected)
         {
             return;
         }
@@ -147,7 +147,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         Upgrades = handshake.Upgrades;
 
         Path += $"&sid={Sid}";
-        _open = true;
+        _connected = true;
     }
 
     private class HandshakePacket

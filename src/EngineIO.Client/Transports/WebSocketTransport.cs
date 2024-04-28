@@ -19,7 +19,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     private readonly SemaphoreSlim _sendSemaphore = new(1, 1);
     private readonly Uri _uri;
 
-    private bool _open = false;
+    private bool _connected;
 
     public WebSocketTransport(string baseAddress, string sid)
     {
@@ -48,7 +48,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}&sid={sid}";
         _uri = new Uri(uri);
     }
-
+    
     public void Dispose()
     {
         _client.Dispose();
@@ -58,11 +58,11 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     public string Name => "websocket";
 
-    public void Close() => _open = false;
+    public bool Connected => _connected = false;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        if (_open)
+        if (_connected)
         {
             return;
         }
@@ -87,17 +87,17 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         // upgrade
         await SendAsync(Packet.UpgradePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
 
-        _open = true;
+        _connected = true;
     }
 
     public Task Disconnect()
     {
-        if (!_open)
+        if (_connected)
         {
-            return Task.CompletedTask;
+            _client.Abort();
         }
 
-        _client.Abort();
+        _connected = false;
         return Task.CompletedTask;
     }
 

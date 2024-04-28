@@ -37,7 +37,7 @@ public sealed class Engine : IDisposable
         }
     }
 
-    public bool Connected { get; private set; }
+    public bool Connected => _transport.Connected;
 
     public void Dispose()
     {
@@ -76,7 +76,6 @@ public sealed class Engine : IDisposable
 #pragma warning disable CS4014
         Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014
-        Connected = true;
     }
 
     private async Task PollAsync()
@@ -93,7 +92,7 @@ public sealed class Engine : IDisposable
             catch (Exception e)
             {
                 writer.Complete();
-                _transport.Close();
+                await _transport.Disconnect();
                 HandleException(e);
                 return;
             }
@@ -118,7 +117,7 @@ public sealed class Engine : IDisposable
                 if (packet.Type == PacketType.Close)
                 {
                     writer.Complete();
-                    _transport.Close();
+                    await _transport.Disconnect();
                     break;
                 }
 

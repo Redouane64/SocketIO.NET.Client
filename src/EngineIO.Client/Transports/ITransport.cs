@@ -13,6 +13,11 @@ public interface ITransport
     /// Transport name.
     /// </summary>
     string Name { get; }
+    
+    /// <summary>
+    /// Flag indicate whether the transport is connected or not.
+    /// </summary>
+    bool Connected { get; }
 
     /// <summary>
     /// Perform transport handshake.
@@ -20,11 +25,6 @@ public interface ITransport
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
     Task ConnectAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Set transport state to closed.
-    /// </summary>
-    void Close();
 
     /// <summary>
     /// Disconnect transport by sending close packet to remote server.

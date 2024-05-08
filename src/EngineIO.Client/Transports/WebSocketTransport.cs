@@ -48,7 +48,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}&sid={sid}";
         _uri = new Uri(uri);
     }
-    
+
     public void Dispose()
     {
         _client.Dispose();

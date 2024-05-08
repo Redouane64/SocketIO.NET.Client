@@ -13,7 +13,7 @@ public interface ITransport
     /// Transport name.
     /// </summary>
     string Name { get; }
-    
+
     /// <summary>
     /// Flag indicate whether the transport is connected or not.
     /// </summary>

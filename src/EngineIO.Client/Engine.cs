@@ -16,19 +16,22 @@ namespace EngineIO.Client;
 
 public sealed class Engine : IDisposable
 {
+    private static readonly object Lock = new object();
+
     private readonly IEncoder _base64Encoder = new Base64Encoder();
     private readonly ClientOptions _clientOptions = new();
-    private readonly ILogger<Engine> _logger;
+    private readonly ILogger<Engine>? _logger;
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
 
+    #nullable disable
     private ITransport _transport;
     private HttpPollingTransport _httpTransport;
     private WebSocketTransport? _wsTransport;
+    private WebSocketTransport _wsTransport;
+    #nullable enable
 
-#pragma warning disable CS8618
     public Engine(Action<ClientOptions> configure, ILoggerFactory? loggerFactory = null)
-#pragma warning restore CS8618
     {
         configure(_clientOptions);
         if (loggerFactory is not null)
@@ -72,10 +75,10 @@ public sealed class Engine : IDisposable
                 return;
             }
         }
-
-#pragma warning disable CS4014
+        
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
         Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
-#pragma warning restore CS4014
+#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
     }
 
     private async Task PollAsync()
@@ -107,10 +110,12 @@ public sealed class Engine : IDisposable
                 // Handle heartbeat packet and yield the other packet types to the caller
                 if (packet.Type == PacketType.Ping)
                 {
-#pragma warning disable CS4014
+
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
                     _transport.SendAsync(Packet.PongPacket.ToPlaintextPacket(), PacketFormat.PlainText,
                         _pollingCancellationTokenSource.Token);
-#pragma warning restore CS4014
+#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+
                     continue;
                 }
 
@@ -123,9 +128,9 @@ public sealed class Engine : IDisposable
 
                 if (packet.Type == PacketType.Message)
                 {
-#pragma warning disable CS4014
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
                     writer.WriteAsync(packet, _pollingCancellationTokenSource.Token);
-#pragma warning restore CS4014
+#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
                 }
             }
         }
@@ -133,7 +138,7 @@ public sealed class Engine : IDisposable
 
     private void HandleException(Exception exception)
     {
-        _logger.LogError(exception, exception.Message);
+        _logger?.LogError(exception, exception.Message);
         // TODO: clean up
     }
 

@@ -28,8 +28,12 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     {
         _httpClient = new HttpClient();
         _httpClient.BaseAddress = new Uri(baseAddress);
-        _httpClient.Timeout = Timeout.InfiniteTimeSpan;
-        _httpClient.DefaultRequestHeaders.ConnectionClose = false;
+        Path = $"/engine.io?EIO={_protocol}&transport={Name}";
+    }
+
+    internal HttpPollingTransport(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
         Path = $"/engine.io?EIO={_protocol}&transport={Name}";
     }
 

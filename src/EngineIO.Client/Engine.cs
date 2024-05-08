@@ -27,7 +27,6 @@ public sealed class Engine : IDisposable
     #nullable disable
     private ITransport _transport;
     private HttpPollingTransport _httpTransport;
-    private WebSocketTransport? _wsTransport;
     private WebSocketTransport _wsTransport;
     #nullable enable
 

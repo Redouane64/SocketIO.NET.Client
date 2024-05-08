@@ -6,16 +6,16 @@ Unlike other existing clients which uses events and delegates, This implementati
 
 The client implements `Engine.IO` and `Socket.IO` core protocols.
 
-## Tasks
+## TODOs
 - **Engine.IO Client**
 
 - [x] Http Polling transport
 - [x] Basic Websocket transport
-- [x] Send/Receiving plain text and Binary packets
+- [x] Send and receiving plain text and Binary packets
 
 - **Socket.IO Client**
 
-- [ ] Connection with namespaces support
+- [ ] Namespaces support
 - [ ] Send and receive plain text and binary payloads
 
 ## Resources

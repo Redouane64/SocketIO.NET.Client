@@ -12,13 +12,11 @@ The client implements `Engine.IO` and `Socket.IO` core protocols.
 - [x] Http Polling transport
 - [x] Basic Websocket transport
 - [x] Send/Receiving plain text and Binary packets
-- [ ] Connection retry
-- [ ] Transport fallback
-- [ ] Packet buffing
 
 - **Socket.IO Client**
 
-- [ ] TODO
+- [ ] Connection with namespaces support
+- [ ] Send and receive plain text and binary payloads
 
 ## Resources
 

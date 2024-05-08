@@ -12,7 +12,7 @@ public class HttpPollingTransportTests
     [Fact]
     void Should_Create_Transport()
     {
-        var transport = new HttpPollingTransport(new HttpClient());
+        var transport = new HttpPollingTransport("http://127.0.0.1:3000");
         Assert.Equal($"/engine.io?EIO=4&transport=polling", transport.Path);
     }
 
@@ -38,7 +38,8 @@ public class HttpPollingTransportTests
             (byte)'d',
         });
         var transport = new HttpPollingTransport(
-            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") });
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
 
         var packets = await transport.GetAsync(CancellationToken.None);
 

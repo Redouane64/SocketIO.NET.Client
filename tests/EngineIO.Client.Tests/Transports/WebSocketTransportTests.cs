@@ -12,6 +12,6 @@ public sealed class WebSocketTransportTests
         var baseAddress = "http://example.com";
         var sid = "1NkM2QzZGMjEyMTIxCg";
         var client = new ClientWebSocket();
-        var transport = new WebSocketTransport(baseAddress, sid, client);
+        var transport = new WebSocketTransport(baseAddress, sid);
     }
 }

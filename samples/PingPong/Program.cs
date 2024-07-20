@@ -10,9 +10,12 @@ using Microsoft.Extensions.Logging.Console;
 
 namespace PingPong;
 
-internal class Program
+internal class Program : IDisposable
 {
-    private static async Task Main(string[] args)
+    private readonly ILogger<Program> logger;
+    private static readonly CancellationTokenSource cts = new();
+
+    Program()
     {
         var loggerFactory = LoggerFactory.Create(builder =>
         {
@@ -24,41 +27,53 @@ internal class Program
             }).SetMinimumLevel(LogLevel.Debug);
         });
 
-        var logger = loggerFactory.CreateLogger<Program>();
-        CancellationTokenSource cts = new();
-
-        using var engine = new Engine((options) =>
+        logger = loggerFactory.CreateLogger<Program>();
+        Engine = new Engine((options) =>
         {
-            options.Uri = "http://127.0.0.1:9854";
-            options.AutoUpgrade = false;
+            options.BaseAddress = "http://127.0.0.1:9854";
+            options.AutoUpgrade = true;
         }, loggerFactory);
+    }
 
+    public Engine Engine { get; }
+
+    private static async Task Main(string[] args)
+    {
         Console.CancelKeyPress += async (sender, eventArgs) =>
         {
             await cts.CancelAsync();
         };
 
-        await engine.ConnectAsync(cts.Token);
+        var program = new Program();
+        program.logger.LogDebug("Client Starting...");
 
-        /*
-        Task.Run(async () =>
-        {
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
-            while (await timer.WaitForNextTickAsync())
-            {
-                await engine.SendAsync("Hello from client!!");
-            }
-        });
-        */
+        await program.Engine.ConnectAsync(cts.Token);
+        await Task.WhenAll(Task.Run(program.EmitAsync), Task.Run(program.ListenAsync));
 
-        await foreach (var packet in engine.ListenAsync(cts.Token))
+        program.logger.LogDebug("Disconnecting...");
+        await program.Engine.DisconnectAsync();
+    }
+
+    private async Task ListenAsync()
+    {
+        await foreach (var packet in Engine.ListenAsync(cts.Token))
         {
             var message = Encoding.UTF8.GetString(packet.Body.Span);
             logger.LogInformation("Server: {message}", message);
         }
-
-        await engine.DisconnectAsync();
-        Console.ReadKey();
     }
 
+    private async Task EmitAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        while (await timer.WaitForNextTickAsync(cts.Token))
+        {
+            await Engine.SendAsync("Ping", cts.Token);
+        }
+    }
+
+    public void Dispose()
+    {
+        Engine.Dispose();
+    }
 }

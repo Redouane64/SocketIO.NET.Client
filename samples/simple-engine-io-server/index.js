@@ -33,17 +33,7 @@ server.on('connection', socket => {
   });
   
   socket.on('message', data => { 
-    console.log(`[Client] ${new Date().toISOString()} ${data}`);
-    socket.send(data);
+    console.log(data);
+    socket.send(`Pong`);
   });
-  
-  setInterval(() => {
-    socket.send("Hello!!!");
-  }, 5000)
-
-  /*
-  setTimeout(() => {
-    socket.close();
-  }, 15000)
-  */
 });

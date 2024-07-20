@@ -16,8 +16,6 @@ namespace EngineIO.Client;
 
 public sealed class Engine : IDisposable
 {
-    private static readonly object Lock = new object();
-
     private readonly IEncoder _base64Encoder = new Base64Encoder();
     private readonly ClientOptions _clientOptions = new();
     private readonly ILogger<Engine>? _logger;
@@ -40,7 +38,7 @@ public sealed class Engine : IDisposable
     }
 
     public bool Connected => _transport.Connected;
-
+    
     public void Dispose()
     {
         _pollingCancellationTokenSource.Dispose();
@@ -96,7 +94,7 @@ public sealed class Engine : IDisposable
                 writer.Complete();
                 await _transport.Disconnect();
                 HandleException(e);
-                return;
+                break;
             }
 
             foreach (var data in packets)
@@ -139,6 +137,7 @@ public sealed class Engine : IDisposable
     {
         _logger?.LogError(exception, exception.Message);
         // TODO: clean up
+        _pollingCancellationTokenSource.Cancel();
     }
 
     public async Task DisconnectAsync()
@@ -154,13 +153,10 @@ public sealed class Engine : IDisposable
     /// <returns>Packets</returns>
     public async IAsyncEnumerable<Packet> ListenAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        if (!Connected)
-        {
-            yield break;
-        }
-        
         var reader = _packetsChannel.Reader;
-        while (await reader.WaitToReadAsync(cancellationToken))
+        var listenerCancellationToken = CancellationTokenSource.CreateLinkedTokenSource(this._pollingCancellationTokenSource.Token,
+            cancellationToken);
+        while (await reader.WaitToReadAsync(listenerCancellationToken.Token))
         {
             while (reader.TryRead(out var packet))
             {

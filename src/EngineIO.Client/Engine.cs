@@ -22,11 +22,11 @@ public sealed class Engine : IDisposable
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
 
-    #nullable disable
+#nullable disable
     private ITransport _transport;
     private HttpPollingTransport _httpTransport;
     private WebSocketTransport _wsTransport;
-    #nullable enable
+#nullable enable
 
     public Engine(Action<ClientOptions> configure, ILoggerFactory? loggerFactory = null)
     {
@@ -38,7 +38,7 @@ public sealed class Engine : IDisposable
     }
 
     public bool Connected => _transport.Connected;
-    
+
     public void Dispose()
     {
         _pollingCancellationTokenSource.Dispose();
@@ -72,7 +72,7 @@ public sealed class Engine : IDisposable
                 return;
             }
         }
-        
+
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
         Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed

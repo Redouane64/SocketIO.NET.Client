@@ -6,17 +6,23 @@ using System.Threading.Tasks;
 using EngineIO.Client;
 
 using Microsoft.Extensions.Logging;
+#if DEBUG
 using Microsoft.Extensions.Logging.Console;
+#else
+using Microsoft.Extensions.Logging.Abstractions;
+#endif
 
 namespace PingPong;
 
 internal class Program : IDisposable
 {
+    private readonly ILoggerFactory loggerFactory;
     private readonly ILogger<Program> logger;
     private static readonly CancellationTokenSource cts = new();
 
     Program()
     {
+#if DEBUG
         var loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.AddSimpleConsole(o =>
@@ -26,8 +32,12 @@ internal class Program : IDisposable
                 o.ColorBehavior = LoggerColorBehavior.Enabled;
             }).SetMinimumLevel(LogLevel.Debug);
         });
-
+        
         logger = loggerFactory.CreateLogger<Program>();
+#else
+        this.loggerFactory = NullLoggerFactory.Instance;
+        this.logger = loggerFactory.CreateLogger<Program>();
+#endif
         Engine = new Engine((options) =>
         {
             options.BaseAddress = "http://127.0.0.1:9854";

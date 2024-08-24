@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Net.WebSockets;
@@ -104,13 +105,14 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         var packets = new Collection<ReadOnlyMemory<byte>>();
-        var stream = new MemoryStream();
-        var buffer = new byte[16];
-
+        using var stream = new MemoryStream();
+        using var rent = MemoryPool<byte>.Shared.Rent(16);
+        Memory<byte> buffer = rent.Memory;
+        
         try
         {
             await _receiveSemaphore.WaitAsync(CancellationToken.None);
-            WebSocketReceiveResult result;
+            ValueWebSocketReceiveResult result;
             do
             {
                 result = await _client.ReceiveAsync(buffer, cancellationToken);
@@ -121,7 +123,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                     break;
                 }
 
-                await stream.WriteAsync(buffer, 0, result.Count, cancellationToken);
+                await stream.WriteAsync(buffer, cancellationToken);
             } while (!result.EndOfMessage);
         }
         finally

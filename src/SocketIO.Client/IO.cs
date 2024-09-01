@@ -40,17 +40,17 @@ public class IO
         yield return Array.Empty<byte>();
     }
 
-    public Task SendAsync(string? @namespace, ReadOnlyMemory<byte> data)
+    public Task SendAsync(ReadOnlyMemory<byte> data, string? @namespace = null)
     {
         return Task.CompletedTask;
     }
     
-    public Task SendAsync<T>(string? @namespace, T data)
+    public Task SendAsync<T>(T data, string? @namespace = null)
     {
         return Task.CompletedTask;
     }
     
-    public Task SendAsync<T>(string? @namespace, T[] data)
+    public Task SendAsync<T>(T[] data, string? @namespace = null)
     {
         return Task.CompletedTask;
     }

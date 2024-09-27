@@ -7,8 +7,8 @@ namespace SocketIO.Client.Packets;
 internal interface PacketData
 {
     void Serialize(Utf8JsonWriter stream);
-
 }
+
 internal sealed class TextPacketData : PacketData
 {
     public string Data { get; }
@@ -55,11 +55,6 @@ internal sealed class BinaryPacketData : PacketData
 
     [JsonPropertyName("num")]
     public int Id { get; set; }
-
-    public ReadOnlySpan<byte> Serialize()
-    {
-        throw new NotImplementedException();
-    }
 
     public void Serialize(Utf8JsonWriter stream)
     {

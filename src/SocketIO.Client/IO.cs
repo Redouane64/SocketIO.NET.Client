@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 
 using EngineIO.Client;
 
+using SocketIO.Client.Packets;
+
 namespace SocketIO.Client;
 
 public class IO
@@ -37,21 +39,24 @@ public class IO
     public async IAsyncEnumerable<ReadOnlyMemory<byte>> ListenAsync(
         string? @namespace = default, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        yield return Array.Empty<byte>();
+        yield return await Task.FromResult(Array.Empty<byte>());
     }
 
     public Task SendAsync(ReadOnlyMemory<byte> data, string? @namespace = null)
     {
+        var packet = new Packet(PacketType.Event) { Namespace = @namespace, };
+        packet.AddItem(data);
+        
+        // TODO: 
         return Task.CompletedTask;
     }
     
-    public Task SendAsync<T>(T data, string? @namespace = null)
+    public Task SendAsync<T>(T data, string? @namespace = null) where T : class
     {
-        return Task.CompletedTask;
-    }
-    
-    public Task SendAsync<T>(T[] data, string? @namespace = null)
-    {
+        // TODO: send as string data
+        var packet = new Packet(PacketType.Event) { Namespace = @namespace, };
+        packet.AddItem(data);
+
         return Task.CompletedTask;
     }
 }

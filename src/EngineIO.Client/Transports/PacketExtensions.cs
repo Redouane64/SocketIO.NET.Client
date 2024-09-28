@@ -13,7 +13,7 @@ public static class PacketExtensions
     /// <param name="packet">Packet instance</param>
     /// <returns></returns>
     /// <exception cref="InvalidOperationException"></exception>
-    public static ReadOnlyMemory<byte> ToPlaintextPacket(this Packet packet)
+    public static ReadOnlyMemory<byte> ToWirePacket(this Packet packet)
     {
         if (packet.Format != PacketFormat.PlainText && packet.Type != PacketType.Message)
         {
@@ -39,7 +39,7 @@ public static class PacketExtensions
     /// <param name="encoder">Binary packet encoder</param>
     /// <returns></returns>
     /// <exception cref="InvalidOperationException"></exception>
-    public static ReadOnlyMemory<byte> ToBinaryPacket(this Packet packet, IEncoder encoder)
+    public static ReadOnlyMemory<byte> ToWirePacket(this Packet packet, IEncoder encoder)
     {
         if (packet.Format != PacketFormat.Binary && packet.Type != PacketType.Message)
         {

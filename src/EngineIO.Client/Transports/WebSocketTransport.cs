@@ -71,7 +71,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         await _client.ConnectAsync(_uri, cancellationToken);
 
         // ping probe
-        await SendAsync(Packet.PingProbePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
+        await SendAsync(Packet.PingProbePacket.ToWirePacket(), PacketFormat.PlainText, cancellationToken);
 
         // pong probe
         var data = await GetAsync(cancellationToken);
@@ -86,7 +86,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         }
 
         // upgrade
-        await SendAsync(Packet.UpgradePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
+        await SendAsync(Packet.UpgradePacket.ToWirePacket(), PacketFormat.PlainText, cancellationToken);
 
         _connected = true;
     }

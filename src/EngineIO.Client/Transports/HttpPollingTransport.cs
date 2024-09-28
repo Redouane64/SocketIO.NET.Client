@@ -59,7 +59,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     {
         if (_connected)
         {
-            await SendAsync(Packet.ClosePacket.ToPlaintextPacket(), PacketFormat.PlainText);
+            await SendAsync(Packet.ClosePacket.ToWirePacket(), PacketFormat.PlainText);
         }
 
         _connected = false;

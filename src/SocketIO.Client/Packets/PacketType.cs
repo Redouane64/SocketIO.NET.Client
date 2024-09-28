@@ -64,6 +64,7 @@ public class Packet
     /// <param name="data">Plain text data</param>
     public void AddItem(string data)
     {
+        // TODO: check if packet type is not binary event, if it is, we should throw
         this._data.Add(new TextPacketData(data));
     }
     
@@ -73,6 +74,8 @@ public class Packet
     /// <param name="data">Binary data</param>
     public void AddItem(ReadOnlyMemory<byte> data)
     {
+        // TODO: check if packet type is binary event. if not, we should throw
+        
         int id = this._data.OfType<BinaryPacketData>().Count();
         this._data.Add(new BinaryPacketData(id, data));
     }
@@ -89,57 +92,51 @@ public class Packet
 
     internal ReadOnlySpan<byte> Encode()
     {
-        using (var stream = new MemoryStream())
+        using var stream = new MemoryStream();
+        // write packet header
+        using var headerWriter = new StreamWriter(stream);
+        
+        // write packet type
+        headerWriter.Write((char)this.Type);
+        if (Type is PacketType.BinaryEvent or PacketType.BinaryAck && this._data.Count > 0)
         {
-            // Write packet header
-            var headerWriter = new StreamWriter(stream);
-            
-            headerWriter.Write((char)this.Type);
-            if (Type is PacketType.BinaryEvent or PacketType.BinaryAck && this._data.Count > 0)
-            {
-                var count = this._data.OfType<BinaryPacketData>().Count();
-                headerWriter.Write(count);
-                headerWriter.Write('-');
-            }
-
-            // Write packet namespace
-            headerWriter.Write(this.Namespace);
-            headerWriter.Write(',');
-
-            // Write acknowledgement id if set
-            if (this.AckId.HasValue)
-            {
-                headerWriter.Write(this.AckId);
-            }
-            headerWriter.Flush();
-            
-            // Write packet content
-            var dataWriter = new Utf8JsonWriter(stream);
-            dataWriter.WriteStartArray();
-            foreach (PacketData item in this._data)
-            {
-                if (item is TextPacketData plainText)
-                {
-                    plainText.Serialize(dataWriter);
-                }
-                else if (item is BinaryPacketData binary)
-                {
-                    binary.Serialize(dataWriter);
-                }
-                else
-                {
-                    item.Serialize(dataWriter);
-                }
-            }
-            dataWriter.WriteEndArray();
-            dataWriter.Flush();
-            
-            stream.Seek(0, SeekOrigin.Begin);
-            var data = stream.ToArray();
-
-            headerWriter.Dispose();
-            
-            return data;
+            var count = this._data.OfType<BinaryPacketData>().Count();
+            headerWriter.Write(count);
+            headerWriter.Write('-');
         }
+
+        // write packet namespace
+        headerWriter.Write(this.Namespace);
+        headerWriter.Write(',');
+
+        // write acknowledgement id if set
+        if (this.AckId.HasValue)
+        {
+            headerWriter.Write(this.AckId);
+        }
+        headerWriter.Flush();
+            
+        // write packet content
+        var dataWriter = new Utf8JsonWriter(stream);
+        dataWriter.WriteStartArray();
+        foreach (PacketData item in this._data)
+        {
+            if (item is TextPacketData plainText)
+            {
+                plainText.Serialize(dataWriter);
+            }
+            else if (item is BinaryPacketData binary)
+            {
+                binary.Serialize(dataWriter);
+            }
+            else
+            {
+                item.Serialize(dataWriter);
+            }
+        }
+        dataWriter.WriteEndArray();
+        dataWriter.Flush();
+        
+        return stream.ToArray();
     }
 }

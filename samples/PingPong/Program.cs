@@ -58,7 +58,7 @@ internal class Program : IDisposable
         program.logger.LogDebug("Client Starting...");
 
         await program.Engine.ConnectAsync(cts.Token);
-        await Task.WhenAll(Task.Run(program.EmitAsync), Task.Run(program.ListenAsync));
+        await Task.WhenAll(Task.Run(program.EmitAsync, cts.Token), Task.Run(program.ListenAsync, cts.Token));
 
         program.logger.LogDebug("Disconnecting...");
         await program.Engine.DisconnectAsync();

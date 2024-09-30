@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 
 namespace EngineIO.Client.Packets;
 
@@ -42,15 +41,11 @@ public readonly struct Packet
         return true;
     }
 
-    public static Packet CreateMessagePacket(string text)
+    public static Packet CreatePacket(PacketFormat format, ReadOnlyMemory<byte> body)
     {
-        var body = Encoding.UTF8.GetBytes(text);
-        return new Packet(PacketFormat.PlainText, PacketType.Message, body);
-    }
-
-    public static Packet CreateBinaryPacket(ReadOnlyMemory<byte> body)
-    {
-        return new Packet(PacketFormat.Binary, PacketType.Message, body);
+        return format == PacketFormat.Binary ? 
+            new Packet(PacketFormat.Binary, PacketType.Message, body) 
+            : new Packet(PacketFormat.PlainText, PacketType.Message, body);
     }
 
     public Packet(PacketFormat format, PacketType type, ReadOnlyMemory<byte> body)
@@ -58,6 +53,7 @@ public readonly struct Packet
         Format = format;
         Type = format == PacketFormat.Binary ? PacketType.Message : type;
         Body = body;
+        // count body content bytes length and packet type byte
         Length = body.Length + 1;
     }
 

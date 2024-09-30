@@ -1,5 +1,3 @@
-using System.Text;
-
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transports;
 
@@ -14,7 +12,7 @@ public class PacketTests
             PacketFormat.PlainText,
             PacketType.Message,
             new[] { (byte)'H', (byte)'i' })
-            .ToPlaintextPacket();
+            .ToWirePacket();
 
         Assert.Equal((byte)PacketType.Message, packet.Span[0]);
         Assert.Equal((byte)'H', packet.Span[1]);
@@ -24,13 +22,14 @@ public class PacketTests
     [Fact]
     void Create_Payload_From_Binary_Message()
     {
-        var body = Encoding.UTF8.GetBytes("Hi");
+        var body = "Hi"u8.ToArray();
         var base64 = Convert.ToBase64String(body);
+        
         var packet = new Packet(
                 PacketFormat.Binary,
                 PacketType.Message,
                 new[] { (byte)'H', (byte)'i' })
-            .ToBinaryPacket(new Base64Encoder());
+            .ToWirePacket(new Base64Encoder());
 
         Assert.Equal((byte)'b', packet.Span[0]);
         Assert.Equal((byte)base64[0], packet.Span[1]);
@@ -65,6 +64,6 @@ public class PacketTests
     void PingProbePacket_Should_Be_Valid()
     {
         var packet = Packet.PingProbePacket;
-        Assert.Equal((byte)PacketType.Ping, packet.ToPlaintextPacket().Span[0]);
+        Assert.Equal((byte)PacketType.Ping, packet.ToWirePacket().Span[0]);
     }
 }

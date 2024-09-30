@@ -8,12 +8,39 @@ namespace SocketIO.Client.Packets;
 
 public enum PacketType : byte
 {
+    /// <summary>
+    /// Connect packet type
+    /// </summary>
     Connect = 0x30,
+    
+    /// <summary>
+    /// Disconnect packet type
+    /// </summary>
     Disconnect = 0x31,
+    
+    /// <summary>
+    /// Event packet type with Plaintext/JSON data
+    /// </summary>
     Event = 0x32,
+    
+    /// <summary>
+    /// Acknowledgement packet type with plaintext/json data
+    /// </summary>
     Ack = 0x33,
+    
+    /// <summary>
+    /// Connection error packet type
+    /// </summary>
     ConnectError = 0x34,
+    
+    /// <summary>
+    /// Event packet type with binary data
+    /// </summary>
     BinaryEvent = 0x35,
+    
+    /// <summary>
+    /// Acknowledgement packet type with binary data
+    /// </summary>
     BinaryAck = 0x36
 }
 
@@ -37,23 +64,30 @@ public class Packet
     public PacketType Type { get; }
     public string? Namespace { get; internal set; }
     public uint? AckId { get; }
+
+    public string Event { get; }
     
-    private List<PacketData> _data = new();
+    private readonly List<IPacketData> _data = new();
     
+    private readonly MemoryStream _buffer = new();
+
     public Packet(PacketType type)
+        : this(type, "/", "message")
     {
         Type = type;
         Namespace = "/";
     }
     
-    public Packet(PacketType type, string @namespace)
-        : this(type)
+    public Packet(PacketType type, string @namespace, string @event)
     {
+        Type = type;
         Namespace = @namespace;
+        Event = @event;
+        this.AddItem(Event);
     }
     
-    public Packet(PacketType type, string @namespace, uint ackId)
-        : this(type, @namespace)
+    public Packet(PacketType type, string @namespace, string @event, uint ackId)
+        : this(type, @namespace, @event)
     {
         AckId = ackId;
     }
@@ -90,12 +124,16 @@ public class Packet
         this._data.Add(new JsonPacketData<T>(data));
     }
 
-    internal ReadOnlySpan<byte> Encode()
+    /// <summary>
+    /// Serialize the packet and return the underlying memory stream which contains the raw packet bytes.
+    /// </summary>
+    /// <returns>The underlying `MemoryStream`</returns>
+    internal MemoryStream Serialize()
     {
-        using var stream = new MemoryStream();
         // write packet header
-        using var headerWriter = new StreamWriter(stream);
-        
+        using var headerWriter = new StreamWriter(this._buffer);
+        using var dataWriter = new Utf8JsonWriter(this._buffer);
+
         // write packet type
         headerWriter.Write((char)this.Type);
         if (Type is PacketType.BinaryEvent or PacketType.BinaryAck && this._data.Count > 0)
@@ -117,26 +155,14 @@ public class Packet
         headerWriter.Flush();
             
         // write packet content
-        var dataWriter = new Utf8JsonWriter(stream);
         dataWriter.WriteStartArray();
-        foreach (PacketData item in this._data)
+        foreach (IPacketData item in this._data)
         {
-            if (item is TextPacketData plainText)
-            {
-                plainText.Serialize(dataWriter);
-            }
-            else if (item is BinaryPacketData binary)
-            {
-                binary.Serialize(dataWriter);
-            }
-            else
-            {
-                item.Serialize(dataWriter);
-            }
+            item.Serialize(dataWriter);
         }
         dataWriter.WriteEndArray();
         dataWriter.Flush();
         
-        return stream.ToArray();
+        return this._buffer;
     }
 }

@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace SocketIO.Client.Packets;
 
-internal interface PacketData
+internal interface IPacketData
 {
     void Serialize(Utf8JsonWriter stream);
 }

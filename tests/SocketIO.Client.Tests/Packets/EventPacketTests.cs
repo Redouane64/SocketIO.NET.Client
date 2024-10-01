@@ -65,6 +65,14 @@ public class EventPacketTests
         
         Assert.Equal(expectedEncodedPacket, encodedPacket);
     }
+
+    [Fact]
+    void ShouldThrowWhenAddingInvalidPayloadPacket()
+    {
+        var packet = new Packet(PacketType.Event);
+        var invalidPayload = new ReadOnlyMemory<byte>(new byte[] { 1, 2, 3 });
+        Assert.Throws<InvalidOperationException>(() => packet.AddItem(invalidPayload));
+    }
     
     [Fact]
     void ShouldSerializePlainTextEventWithNamespace()

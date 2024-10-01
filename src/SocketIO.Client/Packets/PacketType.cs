@@ -122,11 +122,6 @@ public class Packet
             throw new InvalidOperationException();
         }
 
-        if (Type == PacketType.BinaryEvent || Type == PacketType.BinaryAck)
-        {
-            throw new InvalidOperationException();
-        }
-
         this._data.Add(data);
     }
 
@@ -136,6 +131,11 @@ public class Packet
     /// <param name="data">Plain text data</param>
     public void AddItem(string data)
     {
+        if (Type == PacketType.BinaryEvent || Type == PacketType.BinaryAck)
+        {
+            throw new InvalidOperationException();
+        }
+        
         this._AddItem(new TextPacketData(data));
     }
     
@@ -145,6 +145,11 @@ public class Packet
     /// <param name="data">Binary data</param>
     public void AddItem(ReadOnlyMemory<byte> data)
     {
+        if (Type == PacketType.Event || Type == PacketType.Ack)
+        {
+            throw new InvalidOperationException();
+        }
+        
         int id = this._data.OfType<BinaryPacketData>().Count();
         this._AddItem(new BinaryPacketData(id, data));
     }
@@ -156,6 +161,11 @@ public class Packet
     /// <typeparam name="T">Data type</typeparam>
     public void AddItem<T>(T data) where T : class
     {
+        if (Type == PacketType.BinaryEvent || Type == PacketType.BinaryAck)
+        {
+            throw new InvalidOperationException();
+        }
+        
         this._AddItem(new JsonPacketData<T>(data));
     }
 

@@ -145,7 +145,7 @@ public class Packet
     /// <param name="data">Binary data</param>
     public void AddItem(ReadOnlyMemory<byte> data)
     {
-        if (Type == PacketType.Event || Type == PacketType.Ack)
+        if (Type != PacketType.BinaryEvent || Type != PacketType.BinaryAck)
         {
             throw new InvalidOperationException();
         }

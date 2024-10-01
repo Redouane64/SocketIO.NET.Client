@@ -5,15 +5,22 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using EngineIO.Client;
+using EngineIO.Client.Transports;
+using PacketFormat = EngineIO.Client.Packets.PacketFormat;
 
 using SocketIO.Client.Packets;
+
 
 namespace SocketIO.Client;
 
 public class IO
 {
+    private static readonly string DefaultPath = "socket.io";
+    
     private readonly Engine _client;
     private readonly string _baseUrl;
+
+    public string Path { get; set; } = DefaultPath;
     
     // Map namespace with its corresponding sid
     private readonly Dictionary<string, string> _namespaces = new();
@@ -26,7 +33,7 @@ public class IO
         {
             config.BaseAddress = baseUrl;
             config.AutoUpgrade = true;
-            
+            config.Path = Path;
             // TODO: allow passing custom headers and queries
         });
     }
@@ -39,24 +46,38 @@ public class IO
     public async IAsyncEnumerable<ReadOnlyMemory<byte>> ListenAsync(
         string? @namespace = default, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        yield return await Task.FromResult(Array.Empty<byte>());
+        // TODO:
+        yield return Array.Empty<byte>();
+    }
+
+    private Task _Send(Packet packet)
+    {
+        var buffer = packet.Serialize().ToArray();
+        var eioPacker = EngineIO.Client.Packets.Packet.CreatePacket(PacketFormat.PlainText, buffer);
+
+        return this._client.SendAsync(eioPacker.ToWirePacket());
     }
 
     public Task SendAsync(ReadOnlyMemory<byte> data, string? @namespace = null)
     {
-        var packet = new Packet(PacketType.Event) { Namespace = @namespace, };
+        var packet = new Packet(PacketType.BinaryEvent, @namespace);
         packet.AddItem(data);
         
         // TODO: 
-        return Task.CompletedTask;
+        return this._Send(packet);
+    }
+
+    public Task SendAsync(string text, string? @namespace = null)
+    {
+        var packet = new Packet(PacketType.Event, @namespace);
+        packet.AddItem(text);
+        return this._Send(packet);
     }
     
     public Task SendAsync<T>(T data, string? @namespace = null) where T : class
     {
-        // TODO: send as string data
-        var packet = new Packet(PacketType.Event) { Namespace = @namespace, };
+        var packet = new Packet(PacketType.Event, @namespace);
         packet.AddItem(data);
-
-        return Task.CompletedTask;
+        return this._Send(packet);
     }
 }

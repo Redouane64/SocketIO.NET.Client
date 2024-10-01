@@ -10,8 +10,9 @@ const io = new Server({
 
 io.on("connection", (socket) => {
     // ...
-    socket.on('data', (data) => {
+    socket.on('message', (data, callback) => {
         console.log(data);
+        callback?.apply(this,['OK']);
     })
 });
 

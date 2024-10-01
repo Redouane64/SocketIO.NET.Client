@@ -87,7 +87,7 @@ public class Packet
         Namespace = @namespace;
     }
     
-    public Packet(PacketType type, string @namespace, string @event)
+    public Packet(PacketType type, string? @namespace, string @event)
     {
         if ((type == PacketType.Connect || type == PacketType.Disconnect) && @event != DefaultEventName)
         {
@@ -95,7 +95,7 @@ public class Packet
         }
         
         Type = type;
-        Namespace = @namespace;
+        Namespace = @namespace ?? DefaultNamespace;
         Event = @event!;
         
         if (type is PacketType.Event or PacketType.BinaryEvent)

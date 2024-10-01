@@ -53,4 +53,11 @@ public class DisconnectPacketTests
         Assert.Equal(PacketType.Disconnect, packet.Type);
         Assert.Equal(expectedEncodedPacket, encodedPacket);
     }
+    
+    [Fact]
+    void ShouldThrowExceptionWhenAddingItemToDisonnectPacket()
+    {
+        var packet = Packet.DisconnectPacket;
+        Assert.Throws<InvalidOperationException>(() => packet.AddItem("World"));
+    }
 }

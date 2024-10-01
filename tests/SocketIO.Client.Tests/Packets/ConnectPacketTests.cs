@@ -49,5 +49,11 @@ public class ConnectPacketTests
         Assert.Equal(PacketType.Connect, connectPacket.Type);
         Assert.Equal($"0/{@namespace},", plaintext);
     }
-    
+
+    [Fact]
+    void ShouldThrowExceptionWhenAddingItemToConnectPacket()
+    {
+        var packet = Packet.ConnectPacket;
+        Assert.Throws<InvalidOperationException>(() => packet.AddItem("World"));
+    }
 }

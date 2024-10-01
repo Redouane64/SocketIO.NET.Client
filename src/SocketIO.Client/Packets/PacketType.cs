@@ -57,14 +57,17 @@ public enum PacketType : byte
 
 public class Packet
 {
-    public static Packet ConnectPacket = new(PacketType.Connect);
+    public static readonly Packet ConnectPacket = new(PacketType.Connect);
 
     public static Packet DisconnectPacket = new(PacketType.Disconnect);
 
-    public PacketType Type { get; }
-    public string? Namespace { get; internal set; }
-    public uint? AckId { get; }
+    const string DefaultNamespace = "/";
+    
+    const string DefaultEventName = "message";
 
+    public PacketType Type { get; }
+    public string? Namespace { get; }
+    public uint? AckId { get; }
     public string Event { get; }
     
     private readonly List<IPacketData> _data = new();
@@ -72,24 +75,59 @@ public class Packet
     private readonly MemoryStream _buffer = new();
 
     public Packet(PacketType type)
-        : this(type, "/", "message")
+        : this(type, DefaultNamespace, DefaultEventName)
     {
         Type = type;
-        Namespace = "/";
+    }
+    
+    public Packet(PacketType type, string @namespace)
+        : this(type, @namespace, DefaultEventName)
+    {
+        Type = type;
+        Namespace = @namespace;
     }
     
     public Packet(PacketType type, string @namespace, string @event)
     {
+        if ((type == PacketType.Connect || type == PacketType.Disconnect) && @event != DefaultEventName)
+        {
+            throw new ArgumentException();
+        }
+        
         Type = type;
         Namespace = @namespace;
-        Event = @event;
-        this.AddItem(Event);
+        Event = @event!;
+        
+        if (type is PacketType.Event or PacketType.BinaryEvent)
+        {
+            this.AddItem(Event);
+        }
     }
     
     public Packet(PacketType type, string @namespace, string @event, uint ackId)
         : this(type, @namespace, @event)
     {
+        if (type != PacketType.Ack && type != PacketType.BinaryAck)
+        {
+            throw new ArgumentException();
+        }
+        
         AckId = ackId;
+    }
+
+    private void _AddItem<T>(T data) where T : IPacketData
+    {
+        if (Type == PacketType.Connect || Type == PacketType.Disconnect)
+        {
+            throw new InvalidOperationException();
+        }
+
+        if (Type == PacketType.BinaryEvent || Type == PacketType.BinaryAck)
+        {
+            throw new InvalidOperationException();
+        }
+
+        this._data.Add(data);
     }
 
     /// <summary>
@@ -98,8 +136,7 @@ public class Packet
     /// <param name="data">Plain text data</param>
     public void AddItem(string data)
     {
-        // TODO: check if packet type is not binary event, if it is, we should throw
-        this._data.Add(new TextPacketData(data));
+        this._AddItem(new TextPacketData(data));
     }
     
     /// <summary>
@@ -108,10 +145,8 @@ public class Packet
     /// <param name="data">Binary data</param>
     public void AddItem(ReadOnlyMemory<byte> data)
     {
-        // TODO: check if packet type is binary event. if not, we should throw
-        
         int id = this._data.OfType<BinaryPacketData>().Count();
-        this._data.Add(new BinaryPacketData(id, data));
+        this._AddItem(new BinaryPacketData(id, data));
     }
     
     /// <summary>
@@ -121,7 +156,7 @@ public class Packet
     /// <typeparam name="T">Data type</typeparam>
     public void AddItem<T>(T data) where T : class
     {
-        this._data.Add(new JsonPacketData<T>(data));
+        this._AddItem(new JsonPacketData<T>(data));
     }
 
     /// <summary>
@@ -136,16 +171,23 @@ public class Packet
 
         // write packet type
         headerWriter.Write((char)this.Type);
-        if (Type is PacketType.BinaryEvent or PacketType.BinaryAck && this._data.Count > 0)
+        if (Type is PacketType.BinaryEvent || Type == PacketType.BinaryAck)
         {
             var count = this._data.OfType<BinaryPacketData>().Count();
-            headerWriter.Write(count);
-            headerWriter.Write('-');
+            if (count > 0)
+            {
+                headerWriter.Write(count);
+                headerWriter.Write('-');
+            }
         }
 
         // write packet namespace
-        headerWriter.Write(this.Namespace);
-        headerWriter.Write(',');
+        if (Namespace != DefaultNamespace)
+        {
+            headerWriter.Write('/');
+            headerWriter.Write(this.Namespace);
+            headerWriter.Write(',');
+        }
 
         // write acknowledgement id if set
         if (this.AckId.HasValue)
@@ -155,6 +197,11 @@ public class Packet
         headerWriter.Flush();
             
         // write packet content
+        if (Type == PacketType.Connect || Type == PacketType.Disconnect)
+        {
+            return this._buffer;
+        }
+        
         dataWriter.WriteStartArray();
         foreach (IPacketData item in this._data)
         {

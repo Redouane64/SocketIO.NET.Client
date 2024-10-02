@@ -67,7 +67,7 @@ public class Packet
 
     public PacketType Type { get; }
     public string? Namespace { get; }
-    public uint? AckId { get; }
+    public int? AckId { get; }
     public string Event { get; }
     
     private readonly List<IPacketData> _data = new();
@@ -80,31 +80,31 @@ public class Packet
         Type = type;
     }
     
-    public Packet(PacketType type, string @namespace)
+    public Packet(PacketType type, string? @namespace)
         : this(type, @namespace, DefaultEventName)
     {
         Type = type;
         Namespace = @namespace;
     }
     
-    public Packet(PacketType type, string? @namespace, string @event)
+    public Packet(PacketType type, string? @namespace, string? @event)
     {
-        if ((type == PacketType.Connect || type == PacketType.Disconnect) && @event != DefaultEventName)
+        if ((type is PacketType.Connect or PacketType.Disconnect) && @event != DefaultEventName)
         {
             throw new ArgumentException();
         }
         
         Type = type;
         Namespace = @namespace ?? DefaultNamespace;
-        Event = @event!;
+        Event = @event ?? DefaultEventName;
         
-        if (type is PacketType.Event or PacketType.BinaryEvent)
+        if (type is PacketType.Event or PacketType.Ack or PacketType.BinaryEvent or PacketType.BinaryAck)
         {
-            this.AddItem(Event);
+            this._AddItem(new TextPacketData(Event));
         }
     }
     
-    public Packet(PacketType type, string @namespace, string @event, uint ackId)
+    public Packet(PacketType type, int ackId, string? @namespace, string? @event)
         : this(type, @namespace, @event)
     {
         if (type != PacketType.Ack && type != PacketType.BinaryAck)
@@ -145,7 +145,7 @@ public class Packet
     /// <param name="data">Binary data</param>
     public void AddItem(ReadOnlyMemory<byte> data)
     {
-        if (Type != PacketType.BinaryEvent || Type != PacketType.BinaryAck)
+        if (Type != PacketType.BinaryEvent && Type != PacketType.BinaryAck)
         {
             throw new InvalidOperationException();
         }
@@ -195,18 +195,21 @@ public class Packet
         if (Namespace != DefaultNamespace)
         {
             headerWriter.Write('/');
-            headerWriter.Write(this.Namespace);
+            headerWriter.Write(Namespace);
             headerWriter.Write(',');
         }
 
         // write acknowledgement id if set
-        if (this.AckId.HasValue)
+        if (AckId.HasValue)
         {
-            headerWriter.Write(this.AckId);
+            headerWriter.Write(AckId);
         }
         headerWriter.Flush();
             
         // write packet content
+        
+        // Connect and Disconnect packet do not contain payload
+        // therefore, writing packet payload is skipped
         if (Type == PacketType.Connect || Type == PacketType.Disconnect)
         {
             return this._buffer;

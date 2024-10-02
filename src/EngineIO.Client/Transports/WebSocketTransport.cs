@@ -105,7 +105,6 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         var packets = new Collection<ReadOnlyMemory<byte>>();
-        using var stream = new MemoryStream();
         using var rent = MemoryPool<byte>.Shared.Rent(16);
         Memory<byte> buffer = rent.Memory;
         
@@ -122,18 +121,15 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                     packets.Add(new[] { (byte)PacketType.Close });
                     break;
                 }
-
-                await stream.WriteAsync(buffer, cancellationToken);
             } while (!result.EndOfMessage);
+
+            packets.Add(buffer[..result.Count]);
         }
         finally
         {
             _receiveSemaphore.Release();
         }
 
-        stream.Seek(0, SeekOrigin.Begin);
-
-        packets.Add(stream.ToArray());
         return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
     }
 

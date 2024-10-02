@@ -53,6 +53,18 @@ public class EventPacketTests
         Assert.Equal(expectedDefaultNamespace, packet.Namespace);
         Assert.Equal(expectedDefaultEvent, packet.Event);
     }
+
+    [Fact]
+    void ShouldCreateEventPacketWithAckId()
+    {
+        var ackId = 42;
+        var packet = new Packet(PacketType.Ack, ackId, null, null);
+        
+        var expectedAckId = ackId;
+        
+        Assert.Equal(PacketType.Ack, packet.Type);
+        Assert.Equal(expectedAckId, packet.AckId);
+    }
     
     [Fact]
     void ShouldSerializePlainTextEventPacket()
@@ -101,6 +113,19 @@ public class EventPacketTests
     }
     
     [Fact]
+    void ShouldSerializePlainTextWithAckIdPacket()
+    {
+        var ackId = 42;
+        var expectedEncodedPacket = $$"""3{{ackId}}["message","Hello!"]""";
+        
+        var packet = new Packet(PacketType.Ack, ackId, null, null);
+        packet.AddItem("Hello!");
+        var encodedPacket = Encoding.UTF8.GetString(packet.Serialize().ToArray());
+        
+        Assert.Equal(expectedEncodedPacket, encodedPacket);
+    }
+    
+    [Fact]
     void ShouldSerializeJsonEventPacket()
     {
         var packet = new Packet(PacketType.Event);
@@ -135,6 +160,19 @@ public class EventPacketTests
         var packet = new Packet(PacketType.Event, null, eventName);
         packet.AddItem(new Foo { Value = "bar" });
 
+        var encodedPacket = Encoding.UTF8.GetString(packet.Serialize().ToArray());
+        
+        Assert.Equal(expectedEncodedPacket, encodedPacket);
+    }
+    
+    [Fact]
+    void ShouldSerializeJsonEventWithAckIdPacket()
+    {
+        var ackId = 42;
+        var expectedEncodedPacket = $$"""3{{ackId}}["message",{"Value":"bar"}]""";
+        
+        var packet = new Packet(PacketType.Ack, ackId, null, null);
+        packet.AddItem(new Foo { Value = "bar" });
         var encodedPacket = Encoding.UTF8.GetString(packet.Serialize().ToArray());
         
         Assert.Equal(expectedEncodedPacket, encodedPacket);

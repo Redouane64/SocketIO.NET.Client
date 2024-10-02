@@ -68,7 +68,7 @@ public class Packet
     public PacketType Type { get; }
     public string? Namespace { get; }
     public int? AckId { get; }
-    public string Event { get; }
+    public string? Event { get; }
     
     private readonly List<IPacketData> _data = new();
     

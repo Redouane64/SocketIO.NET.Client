@@ -9,7 +9,7 @@ internal interface IPacketData
     void Serialize(Utf8JsonWriter stream);
 }
 
-internal readonly struct TextPacketData : IPacketData
+internal sealed class TextPacketData : IPacketData
 {
     public string Data { get; }
     
@@ -24,7 +24,7 @@ internal readonly struct TextPacketData : IPacketData
     }
 }
 
-internal readonly struct JsonPacketData<T> : IPacketData where T : class
+internal sealed class JsonPacketData<T> : IPacketData where T : class
 {
     public T Data { get; }
 
@@ -39,7 +39,7 @@ internal readonly struct JsonPacketData<T> : IPacketData where T : class
     }
 }
 
-internal readonly struct BinaryPacketData : IPacketData
+internal sealed class BinaryPacketData : IPacketData
 {
     public BinaryPacketData(int id, ReadOnlyMemory<byte> data)
     {

@@ -105,7 +105,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         var packets = new Collection<ReadOnlyMemory<byte>>();
-        using var rent = MemoryPool<byte>.Shared.Rent(16);
+        using var rent = MemoryPool<byte>.Shared.Rent(1);
         Memory<byte> buffer = rent.Memory;
         
         try

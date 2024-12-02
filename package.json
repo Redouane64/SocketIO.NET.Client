@@ -4,11 +4,13 @@
   "description": "Socket.IO .NET client samples test server and tools",
   "directories": {},
   "scripts": {
-    "start:server": "npm start -w samples/simple-engine-io-server"
+    "start:engine": "npm start -w samples/simple-engine-io-server",
+    "start:socket": "npm start -w samples/simple-socket-io-server"
   },
   "author": "Redhouane Sobaihi",
   "license": "ISC",
   "workspaces": [
-    "samples/simple-engine-io-server"
+    "samples/simple-engine-io-server",
+    "samples/simple-socket-io-server"
   ]
 }

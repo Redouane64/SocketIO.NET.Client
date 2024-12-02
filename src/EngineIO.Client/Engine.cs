@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -109,7 +110,7 @@ public sealed class Engine : IDisposable
                 {
 
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
-                    _transport.SendAsync(Packet.PongPacket.ToPlaintextPacket(), PacketFormat.PlainText,
+                    _transport.SendAsync(Packet.PongPacket.ToWirePacket(), PacketFormat.PlainText,
                         _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
 
@@ -172,7 +173,8 @@ public sealed class Engine : IDisposable
     /// <param name="cancellationToken"></param>
     public async Task SendAsync(string text, CancellationToken cancellationToken = default)
     {
-        var packet = Packet.CreateMessagePacket(text).ToPlaintextPacket();
+        var body = Encoding.UTF8.GetBytes(text);
+        var packet = Packet.CreatePacket(PacketFormat.PlainText, body).ToWirePacket();
         await _transport.SendAsync(packet, PacketFormat.PlainText, cancellationToken);
     }
 
@@ -183,7 +185,7 @@ public sealed class Engine : IDisposable
     /// <param name="cancellationToken"></param>
     public async Task SendAsync(ReadOnlyMemory<byte> binary, CancellationToken cancellationToken = default)
     {
-        var packet = Packet.CreateBinaryPacket(binary).ToBinaryPacket(_base64Encoder);
+        var packet = Packet.CreatePacket(PacketFormat.Binary, binary).ToWirePacket(_base64Encoder);
         await _transport.SendAsync(packet, PacketFormat.Binary, cancellationToken);
     }
 }

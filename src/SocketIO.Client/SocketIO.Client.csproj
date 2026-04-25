@@ -9,4 +9,8 @@
       <ProjectReference Include="..\EngineIO.Client\EngineIO.Client.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <PackageReference Update="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    </ItemGroup>
+
 </Project>

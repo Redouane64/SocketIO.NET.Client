@@ -18,6 +18,12 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     /// </summary>
     private const int ReceiveChunkSize = 4096;
 
+    /// <summary>
+    ///     How long to wait for the server to answer the close handshake before
+    ///     dropping the socket.
+    /// </summary>
+    private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(5);
+
     private readonly ClientWebSocket _client;
 
     private readonly int _protocol = 4;
@@ -91,15 +97,33 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         _connected = true;
     }
 
-    public Task Disconnect()
+    public async Task Disconnect()
     {
-        if (_connected)
+        if (!_connected)
         {
-            _client.Abort();
+            return;
         }
 
         _connected = false;
-        return Task.CompletedTask;
+
+        try
+        {
+            // Tell the server we are going away, then run the WebSocket close
+            // handshake instead of aborting the socket underneath it.
+            await SendAsync(Packet.ClosePacket);
+
+            if (_client.State == WebSocketState.Open)
+            {
+                using var timeout = new CancellationTokenSource(CloseTimeout);
+                await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, timeout.Token);
+            }
+        }
+        catch (Exception exception) when (
+            exception is WebSocketException or TransportException or OperationCanceledException)
+        {
+            // The peer is already gone or will not answer the close handshake.
+            _client.Abort();
+        }
     }
 
     public async Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)

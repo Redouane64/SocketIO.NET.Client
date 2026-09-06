@@ -14,10 +14,11 @@ using Microsoft.Extensions.Logging;
 
 namespace EngineIO.Client;
 
-public sealed class Engine : IDisposable
+public sealed class Engine : IDisposable, IAsyncDisposable
 {
     /// <summary>
-    ///     How long <see cref="Dispose" /> waits for the receive loop to unwind.
+    ///     How long the synchronous <see cref="Dispose" /> blocks waiting for the
+    ///     receive loop. <see cref="DisposeAsync" /> waits without blocking.
     /// </summary>
     private static readonly TimeSpan PollingShutdownTimeout = TimeSpan.FromSeconds(5);
 
@@ -68,12 +69,36 @@ public sealed class Engine : IDisposable
 
     public bool Connected => _transport.Connected;
 
+    /// <summary>
+    ///     Preferred over <see cref="Dispose" />: waits for the receive loop without
+    ///     blocking the calling thread.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        _pollingCancellationTokenSource.Cancel();
+
+        if (_pollingTask is not null)
+        {
+            try
+            {
+                await _pollingTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancelled before it ever started; there is nothing to wait for.
+            }
+        }
+
+        DisposeCore();
+    }
+
     public void Dispose()
     {
         _pollingCancellationTokenSource.Cancel();
 
         // The receive loop holds the transports and their semaphores. Disposing those
-        // while it is still running makes it fail on a disposed object.
+        // while it is still running makes it fail on a disposed object. Blocking here
+        // is why DisposeAsync is preferred.
         try
         {
             _pollingTask?.Wait(PollingShutdownTimeout);
@@ -83,6 +108,11 @@ public sealed class Engine : IDisposable
             // PollAsync reports its own failures through the logger.
         }
 
+        DisposeCore();
+    }
+
+    private void DisposeCore()
+    {
         _pollingCancellationTokenSource.Dispose();
         _heartbeatCts?.Dispose();
         _httpTransport?.Dispose();

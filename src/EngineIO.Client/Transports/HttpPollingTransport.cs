@@ -5,7 +5,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -175,7 +174,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
 
         var handshake = JsonSerializer
-            .Deserialize<HandshakePacket>(response[0].Body.Span)!;
+            .Deserialize(response[0].Body.Span, HandshakeJsonContext.Default.HandshakePacket)!;
 
         Sid = handshake.Sid;
         MaxPayload = handshake.MaxPayload;
@@ -211,23 +210,5 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         {
             packets.Add(packet);
         }
-    }
-
-    private class HandshakePacket
-    {
-        [JsonPropertyName("sid")]
-        public string? Sid { get; set; }
-
-        [JsonPropertyName("upgrades")]
-        public string[]? Upgrades { get; set; }
-
-        [JsonPropertyName("pingInterval")]
-        public int PingInterval { get; set; }
-
-        [JsonPropertyName("pingTimeout")]
-        public int PingTimeout { get; set; }
-
-        [JsonPropertyName("maxPayload")]
-        public int MaxPayload { get; set; }
     }
 }

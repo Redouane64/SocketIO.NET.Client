@@ -111,12 +111,12 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         var packets = new Collection<ReadOnlyMemory<byte>>();
-        using var rent = MemoryPool<byte>.Shared.Rent(ReceiveChunkSize);
-        Memory<byte> buffer = rent.Memory;
+        await _receiveSemaphore.WaitAsync(cancellationToken);
 
         try
         {
-            await _receiveSemaphore.WaitAsync(CancellationToken.None);
+            using var rent = MemoryPool<byte>.Shared.Rent(ReceiveChunkSize);
+            Memory<byte> buffer = rent.Memory;
             var message = new ArrayBufferWriter<byte>(ReceiveChunkSize);
             ValueWebSocketReceiveResult result;
             do
@@ -152,9 +152,10 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             throw new TransportException(ErrorReason.ConnectionClosed);
         }
 
+        await _sendSemaphore.WaitAsync(cancellationToken);
+
         try
         {
-            await _sendSemaphore.WaitAsync(CancellationToken.None);
             await _client.SendAsync(packets, WebSocketMessageType.Text, true, cancellationToken);
         }
         finally

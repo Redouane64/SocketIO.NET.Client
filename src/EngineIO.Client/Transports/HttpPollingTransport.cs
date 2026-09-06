@@ -68,9 +68,10 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         byte[] data;
+        await _semaphore.WaitAsync(cancellationToken);
+
         try
         {
-            await _semaphore.WaitAsync(cancellationToken);
             using var response = await _httpClient.GetAsync(Path, cancellationToken);
             response.EnsureSuccessStatusCode();
             data = await response.Content.ReadAsByteArrayAsync();
@@ -105,6 +106,8 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
         CancellationToken cancellationToken = default)
     {
+        await _semaphore.WaitAsync(cancellationToken);
+
         try
         {
             using var content = new ReadOnlyMemoryContent(packets);
@@ -112,7 +115,6 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 ? new MediaTypeHeaderValue("application/octet-stream")
                 : new MediaTypeHeaderValue("text/plain") { CharSet = Encoding.UTF8.WebName };
 
-            await _semaphore.WaitAsync(cancellationToken);
             using var response = await _httpClient.PostAsync(Path, content, cancellationToken);
             response.EnsureSuccessStatusCode();
         }

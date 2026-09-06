@@ -29,6 +29,12 @@ public readonly struct Packet
     /// <returns>Boolean indicating success or failure of parse operation</returns>
     public static bool TryParse(ReadOnlyMemory<byte> data, out Packet packet)
     {
+        if (data.Length == 0)
+        {
+            packet = default;
+            return false;
+        }
+
         var format = data.Span[0] == 98 ? PacketFormat.Binary : PacketFormat.PlainText;
         var type = format == PacketFormat.PlainText ? (PacketType)data.Span[0] : PacketType.Message;
         if (!Enum.IsDefined(typeof(PacketType), type))

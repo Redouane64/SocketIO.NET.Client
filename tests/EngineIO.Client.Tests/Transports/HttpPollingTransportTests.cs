@@ -3,6 +3,7 @@ using System.Text;
 using EngineIO.Client.Packets;
 using EngineIO.Client.Tests.Extensions;
 using EngineIO.Client.Transports;
+using EngineIO.Client.Transports.Exceptions;
 
 using Moq;
 
@@ -158,5 +159,47 @@ public class HttpPollingTransportTests
 
         Assert.Single(packets);
         Assert.Equal("Hi", Encoding.UTF8.GetString(packets[0].Body.Span));
+    }
+
+    [Fact]
+    async Task Should_Reject_Handshake_That_Is_Not_An_Open_Packet()
+    {
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        mockHttpMessageHandler.MockGetByteArrayAsync(Encoding.UTF8.GetBytes("4Hello"));
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        var exception = await Assert.ThrowsAsync<TransportException>(
+            () => transport.ConnectAsync(CancellationToken.None));
+
+        Assert.Equal(ErrorReason.InvalidPacket, exception.ErrorReason);
+    }
+
+    [Fact]
+    async Task Should_Send_Sid_On_Every_Request_After_Handshake()
+    {
+        var sid = "1NkM2QzZGMjEyMTIxCg";
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        var requests = mockHttpMessageHandler.MockPollingServer(
+            Encoding.UTF8.GetBytes(Handshake(sid)),
+            Encoding.UTF8.GetBytes("4Hi"));
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        await transport.ConnectAsync(CancellationToken.None);
+        await transport.GetAsync(CancellationToken.None);
+        await transport.SendAsync(Packet.CreateMessagePacket("Hello"), CancellationToken.None);
+
+        Assert.Equal(3, requests.Count);
+        Assert.DoesNotContain("sid=", requests[0].Uri.Query);
+        Assert.Contains($"sid={sid}", requests[1].Uri.Query);
+        Assert.Contains($"sid={sid}", requests[2].Uri.Query);
+    }
+
+    internal static string Handshake(string sid, int maxPayload = 1_000_000)
+    {
+        return $$"""0{"sid":"{{sid}}","maxPayload":{{maxPayload}},"pingTimeout":20000,"pingInterval":25000,"upgrades":["polling","websocket"]}""";
     }
 }

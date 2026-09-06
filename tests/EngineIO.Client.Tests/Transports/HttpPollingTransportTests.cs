@@ -269,6 +269,37 @@ public class HttpPollingTransportTests
         Assert.Single(requests, request => request.Method == HttpMethod.Post);
     }
 
+    [Fact]
+    void Connected_Should_Be_False_Before_Handshake()
+    {
+        var (transport, _) = ConnectedTransport();
+
+        Assert.False(transport.Connected);
+    }
+
+    [Fact]
+    async Task Connected_Should_Be_True_After_Handshake()
+    {
+        var (transport, _) = ConnectedTransport();
+
+        await transport.ConnectAsync(CancellationToken.None);
+
+        // Read twice: reporting the state must not also change it.
+        Assert.True(transport.Connected);
+        Assert.True(transport.Connected);
+    }
+
+    [Fact]
+    async Task Connected_Should_Be_False_After_Disconnect()
+    {
+        var (transport, _) = ConnectedTransport();
+        await transport.ConnectAsync(CancellationToken.None);
+
+        await transport.Disconnect();
+
+        Assert.False(transport.Connected);
+    }
+
     private static (HttpPollingTransport Transport, List<CapturedRequest> Requests) ConnectedTransport(
         int maxPayload = 1_000_000)
     {

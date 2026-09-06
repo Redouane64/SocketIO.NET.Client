@@ -41,7 +41,7 @@ public readonly struct Packet
         }
 
         var type = (PacketType)data.Span[0];
-        if (!Enum.IsDefined(typeof(PacketType), type))
+        if (!Enum.IsDefined(type))
         {
             packet = default;
             return false;

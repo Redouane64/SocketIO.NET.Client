@@ -16,9 +16,11 @@ namespace EngineIO.Client.Transports;
 
 public sealed class HttpPollingTransport : ITransport, IDisposable
 {
+    private readonly IEncoder _encoder = new Base64Encoder();
     private readonly HttpClient _httpClient;
 
     private readonly int _protocol = 4;
+
     /// <summary>
     ///     Guards the long-polling GET. The protocol allows at most one in flight.
     /// </summary>
@@ -29,6 +31,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     ///     not have to wait for the in-flight long poll to return.
     /// </summary>
     private readonly SemaphoreSlim _postSemaphore = new(1, 1);
+
     private readonly byte _separator = 0x1E;
 
     private bool _connected;
@@ -69,13 +72,13 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     {
         if (_connected)
         {
-            await SendAsync(Packet.ClosePacket.ToPlaintextPacket(), PacketFormat.PlainText);
+            await SendAsync(Packet.ClosePacket);
         }
 
         _connected = false;
     }
 
-    public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)
     {
         byte[] data;
         await _getSemaphore.WaitAsync(cancellationToken);
@@ -91,36 +94,39 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             _getSemaphore.Release();
         }
 
-        var packets = new List<ReadOnlyMemory<byte>>();
+        var packets = new List<Packet>();
 
         var start = 0;
         for (var index = start; index < data.Length; index++)
         {
             if (data[index] == _separator)
             {
-                var payload = new ReadOnlyMemory<byte>(data, start, index - start);
-                packets.Add(payload);
+                Decode(new ReadOnlyMemory<byte>(data, start, index - start), packets);
                 start = index + 1;
             }
         }
 
         if (start < data.Length)
         {
-            var payload = new ReadOnlyMemory<byte>(data, start, data.Length - start);
-            packets.Add(payload);
+            Decode(new ReadOnlyMemory<byte>(data, start, data.Length - start), packets);
         }
 
-        return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
+        return new ReadOnlyCollection<Packet>(packets);
     }
 
-    public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
-        CancellationToken cancellationToken = default)
+    public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)
     {
+        // Long-polling carries text only, so a binary packet travels base64-encoded
+        // behind a 'b' prefix.
+        var payload = packet.Format == PacketFormat.Binary
+            ? packet.ToBinaryPacket(_encoder)
+            : packet.ToPlaintextPacket();
+
         await _postSemaphore.WaitAsync(cancellationToken);
 
         try
         {
-            using var content = new ReadOnlyMemoryContent(packets);
+            using var content = new ReadOnlyMemoryContent(payload);
 
             // A polling payload is always text: binary packets travel base64-encoded
             // behind a 'b' prefix, so there is nothing to label octet-stream.
@@ -143,20 +149,15 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             return;
         }
 
-        ReadOnlyCollection<ReadOnlyMemory<byte>> response = await GetAsync(cancellationToken);
+        ReadOnlyCollection<Packet> response = await GetAsync(cancellationToken);
 
-        if (!Packet.TryParse(response[0], out var packet))
-        {
-            throw new TransportException(ErrorReason.InvalidPacket);
-        }
-
-        if (packet.Type != PacketType.Open)
+        if (response.Count == 0 || response[0].Type != PacketType.Open)
         {
             throw new TransportException(ErrorReason.InvalidPacket);
         }
 
         var handshake = JsonSerializer
-            .Deserialize<HandshakePacket>(packet.Body.Span)!;
+            .Deserialize<HandshakePacket>(response[0].Body.Span)!;
 
         Sid = handshake.Sid;
         MaxPayload = handshake.MaxPayload;
@@ -166,6 +167,14 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
         Path += $"&sid={Sid}";
         _connected = true;
+    }
+
+    private void Decode(ReadOnlyMemory<byte> payload, ICollection<Packet> packets)
+    {
+        if (Packet.TryParse(payload, out var packet))
+        {
+            packets.Add(packet);
+        }
     }
 
     private class HandshakePacket

@@ -1,7 +1,6 @@
 using System;
 using System.Buffers;
 using System.Collections.ObjectModel;
-using System.IO;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -77,22 +76,17 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         await _client.ConnectAsync(_uri, cancellationToken);
 
         // ping probe
-        await SendAsync(Packet.PingProbePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
+        await SendAsync(Packet.PingProbePacket, cancellationToken);
 
         // pong probe
-        var data = await GetAsync(cancellationToken);
-        if (!Packet.TryParse(data[0], out var packet))
-        {
-            throw new TransportException(ErrorReason.InvalidPacket);
-        }
-
-        if (packet.Type != PacketType.Pong)
+        var packets = await GetAsync(cancellationToken);
+        if (packets.Count == 0 || packets[0].Type != PacketType.Pong)
         {
             throw new TransportException(ErrorReason.InvalidPacket);
         }
 
         // upgrade
-        await SendAsync(Packet.UpgradePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
+        await SendAsync(Packet.UpgradePacket, cancellationToken);
 
         _connected = true;
     }
@@ -108,9 +102,9 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         return Task.CompletedTask;
     }
 
-    public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)
     {
-        var packets = new Collection<ReadOnlyMemory<byte>>();
+        var packets = new Collection<Packet>();
         await _receiveSemaphore.WaitAsync(cancellationToken);
 
         try
@@ -125,38 +119,55 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
-                    packets.Add(new[] { (byte)PacketType.Close });
-                    return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
+                    _connected = false;
+                    packets.Add(Packet.ClosePacket);
+                    return new ReadOnlyCollection<Packet>(packets);
                 }
 
                 message.Write(buffer.Span[..result.Count]);
             } while (!result.EndOfMessage);
 
-            // Copy out: the writer's buffer is not owned by the caller, and the
-            // rented buffer goes back to the pool when this method returns.
-            packets.Add(message.WrittenSpan.ToArray());
+            // Each frame carries exactly one packet. Copy out: the writer's buffer is
+            // not owned by the caller, and the rented buffer returns to the pool here.
+            var payload = message.WrittenSpan.ToArray();
+
+            if (result.MessageType == WebSocketMessageType.Binary)
+            {
+                // A binary frame is the message payload itself, sent as-is. There is
+                // no packet type byte to parse off the front.
+                packets.Add(Packet.CreateBinaryPacket(payload));
+            }
+            else if (Packet.TryParse(payload, out var packet))
+            {
+                packets.Add(packet);
+            }
         }
         finally
         {
             _receiveSemaphore.Release();
         }
 
-        return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
+        return new ReadOnlyCollection<Packet>(packets);
     }
 
-    public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
-        CancellationToken cancellationToken = default)
+    public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)
     {
         if (_client.State is WebSocketState.Closed or WebSocketState.Aborted)
         {
             throw new TransportException(ErrorReason.ConnectionClosed);
         }
 
+        // Binary is sent as-is in a binary frame. The base64 + 'b' prefix encoding
+        // belongs to long-polling, which can only carry text.
+        var binary = packet.Format == PacketFormat.Binary;
+        var payload = binary ? packet.Body : packet.ToPlaintextPacket();
+        var messageType = binary ? WebSocketMessageType.Binary : WebSocketMessageType.Text;
+
         await _sendSemaphore.WaitAsync(cancellationToken);
 
         try
         {
-            await _client.SendAsync(packets, WebSocketMessageType.Text, true, cancellationToken);
+            await _client.SendAsync(payload, messageType, true, cancellationToken);
         }
         finally
         {

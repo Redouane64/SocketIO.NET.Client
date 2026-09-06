@@ -15,7 +15,6 @@ namespace EngineIO.Client;
 
 public sealed class Engine : IDisposable
 {
-    private readonly IEncoder _base64Encoder = new Base64Encoder();
     private readonly ClientOptions _clientOptions = new();
     private readonly ILogger<Engine>? _logger;
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
@@ -87,18 +86,12 @@ public sealed class Engine : IDisposable
             {
                 var packets = await _transport.GetAsync(_pollingCancellationTokenSource.Token);
 
-                foreach (var data in packets)
+                foreach (var packet in packets)
                 {
-                    if (!Packet.TryParse(data, out var packet))
-                    {
-                        continue;
-                    }
-
                     // Handle heartbeat packet and yield the other packet types to the caller
                     if (packet.Type == PacketType.Ping)
                     {
-                        await _transport.SendAsync(Packet.PongPacket.ToPlaintextPacket(), PacketFormat.PlainText,
-                            _pollingCancellationTokenSource.Token);
+                        await _transport.SendAsync(Packet.PongPacket, _pollingCancellationTokenSource.Token);
                         continue;
                     }
 
@@ -173,8 +166,7 @@ public sealed class Engine : IDisposable
     /// <param name="cancellationToken"></param>
     public async Task SendAsync(string text, CancellationToken cancellationToken = default)
     {
-        var packet = Packet.CreateMessagePacket(text).ToPlaintextPacket();
-        await _transport.SendAsync(packet, PacketFormat.PlainText, cancellationToken);
+        await _transport.SendAsync(Packet.CreateMessagePacket(text), cancellationToken);
     }
 
     /// <summary>
@@ -184,7 +176,6 @@ public sealed class Engine : IDisposable
     /// <param name="cancellationToken"></param>
     public async Task SendAsync(ReadOnlyMemory<byte> binary, CancellationToken cancellationToken = default)
     {
-        var packet = Packet.CreateBinaryPacket(binary).ToBinaryPacket(_base64Encoder);
-        await _transport.SendAsync(packet, PacketFormat.Binary, cancellationToken);
+        await _transport.SendAsync(Packet.CreateBinaryPacket(binary), cancellationToken);
     }
 }

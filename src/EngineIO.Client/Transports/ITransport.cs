@@ -1,4 +1,3 @@
-using System;
 using System.Collections.ObjectModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,16 +31,20 @@ public interface ITransport
     Task Disconnect();
 
     /// <summary>
-    /// Fetch raw packets from server.
+    /// Fetch packets from the server.
     /// </summary>
-    /// <returns>Packets as an array of Bytes.</returns>
-    Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// Decoding the wire format belongs to the transport: long-polling concatenates
+    /// packets and base64-encodes binary ones, while a WebSocket frame carries a
+    /// single packet whose binary form has no packet type prefix at all.
+    /// </remarks>
+    /// <returns>The packets carried by one read.</returns>
+    Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Send raw packets to server.
+    /// Send a packet, encoded for this transport's wire format.
     /// </summary>
-    /// <param name="packets"></param>
-    /// <param name="format"></param>
+    /// <param name="packet"></param>
     /// <param name="cancellationToken"></param>
-    Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format, CancellationToken cancellationToken = default);
+    Task SendAsync(Packet packet, CancellationToken cancellationToken = default);
 }

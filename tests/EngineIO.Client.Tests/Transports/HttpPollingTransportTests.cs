@@ -1,5 +1,6 @@
 using System.Text;
 
+using EngineIO.Client.Packets;
 using EngineIO.Client.Tests.Extensions;
 using EngineIO.Client.Transports;
 
@@ -44,12 +45,12 @@ public class HttpPollingTransportTests
         var packets = await transport.GetAsync(CancellationToken.None);
 
         Assert.Equal(3, packets.Count);
-        Assert.Equal('4', (char)packets[0].Span[0]);
-        Assert.Equal("Hello", Encoding.UTF8.GetString(packets[0][1..].Span));
+        Assert.Equal(PacketType.Message, packets[0].Type);
+        Assert.Equal("Hello", Encoding.UTF8.GetString(packets[0].Body.Span));
 
-        Assert.Equal('2', (char)packets[1].Span[0]);
-        Assert.Equal('4', (char)packets[2].Span[0]);
-        Assert.Equal("World", Encoding.UTF8.GetString(packets[2][1..].Span));
+        Assert.Equal(PacketType.Ping, packets[1].Type);
+        Assert.Equal(PacketType.Message, packets[2].Type);
+        Assert.Equal("World", Encoding.UTF8.GetString(packets[2].Body.Span));
 
     }
 
@@ -72,8 +73,8 @@ public class HttpPollingTransportTests
         var packets = await transport.GetAsync(CancellationToken.None);
 
         Assert.Single(packets);
-        Assert.Equal('4', (char)packets[0].Span[0]);
-        Assert.Equal("Hello", Encoding.UTF8.GetString(packets[0][1..].Span));
+        Assert.Equal(PacketType.Message, packets[0].Type);
+        Assert.Equal("Hello", Encoding.UTF8.GetString(packets[0].Body.Span));
     }
 
     [Fact]

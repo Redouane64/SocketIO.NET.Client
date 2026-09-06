@@ -176,8 +176,17 @@ public sealed class Engine : IDisposable
 
     public async Task DisconnectAsync()
     {
-        _pollingCancellationTokenSource.Cancel();
-        await _transport.Disconnect();
+        try
+        {
+            // Close first, cancel second. Cancelling aborts the in-flight long poll,
+            // which the server treats as the transport going away: it discards the
+            // session, and the close packet then arrives on a session that is gone.
+            await _transport.Disconnect();
+        }
+        finally
+        {
+            _pollingCancellationTokenSource.Cancel();
+        }
     }
 
     /// <summary>

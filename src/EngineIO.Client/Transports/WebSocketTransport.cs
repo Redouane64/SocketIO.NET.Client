@@ -13,6 +13,12 @@ namespace EngineIO.Client.Transports;
 
 public sealed class WebSocketTransport : ITransport, IDisposable
 {
+    /// <summary>
+    ///     Size of a single read from the socket. Messages larger than this are
+    ///     read across several iterations and reassembled.
+    /// </summary>
+    private const int ReceiveChunkSize = 4096;
+
     private readonly ClientWebSocket _client;
 
     private readonly int _protocol = 4;
@@ -105,12 +111,13 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         var packets = new Collection<ReadOnlyMemory<byte>>();
-        using var rent = MemoryPool<byte>.Shared.Rent(1);
+        using var rent = MemoryPool<byte>.Shared.Rent(ReceiveChunkSize);
         Memory<byte> buffer = rent.Memory;
 
         try
         {
             await _receiveSemaphore.WaitAsync(CancellationToken.None);
+            var message = new ArrayBufferWriter<byte>(ReceiveChunkSize);
             ValueWebSocketReceiveResult result;
             do
             {
@@ -121,11 +128,13 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                     packets.Add(new[] { (byte)PacketType.Close });
                     return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
                 }
+
+                message.Write(buffer.Span[..result.Count]);
             } while (!result.EndOfMessage);
 
-            // Copy out: the rented buffer goes back to the pool when this method
-            // returns, and the caller reads the packets after that.
-            packets.Add(buffer.Span[..result.Count].ToArray());
+            // Copy out: the writer's buffer is not owned by the caller, and the
+            // rented buffer goes back to the pool when this method returns.
+            packets.Add(message.WrittenSpan.ToArray());
         }
         finally
         {

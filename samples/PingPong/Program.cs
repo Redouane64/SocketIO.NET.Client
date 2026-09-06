@@ -23,7 +23,7 @@ internal class Program : IDisposable
     Program()
     {
 #if DEBUG
-        var loggerFactory = LoggerFactory.Create(builder =>
+        this.loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.AddSimpleConsole(o =>
             {
@@ -33,7 +33,7 @@ internal class Program : IDisposable
             }).SetMinimumLevel(LogLevel.Debug);
         });
         
-        logger = loggerFactory.CreateLogger<Program>();
+        this.logger = this.loggerFactory.CreateLogger<Program>();
 #else
         this.loggerFactory = NullLoggerFactory.Instance;
         this.logger = loggerFactory.CreateLogger<Program>();

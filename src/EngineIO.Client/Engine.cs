@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 
 using EngineIO.Client.Packets;
 using EngineIO.Client.Transports;
+using EngineIO.Client.Transports.Exceptions;
 
 using Microsoft.Extensions.Logging;
 
@@ -19,6 +20,18 @@ public sealed class Engine : IDisposable
     private readonly ILogger<Engine>? _logger;
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+
+    /// <summary>
+    ///     How long the connection may go without a server ping before it is
+    ///     considered closed. Zero disables the check.
+    /// </summary>
+    private int _heartbeatTimeoutMs;
+
+    /// <summary>
+    ///     <see cref="Environment.TickCount64" /> at which the connection is
+    ///     considered dead if no ping has arrived.
+    /// </summary>
+    private long _heartbeatDeadline;
 
 #nullable disable
     private ITransport _transport;
@@ -71,6 +84,11 @@ public sealed class Engine : IDisposable
             }
         }
 
+        // The server pings every pingInterval and allows pingTimeout for the reply,
+        // so silence for longer than their sum means the connection is gone.
+        _heartbeatTimeoutMs = _httpTransport.PingInterval + _httpTransport.PingTimeout;
+        ResetHeartbeat();
+
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
         Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
 #pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
@@ -84,13 +102,23 @@ public sealed class Engine : IDisposable
         {
             while (!_pollingCancellationTokenSource.IsCancellationRequested)
             {
-                var packets = await _transport.GetAsync(_pollingCancellationTokenSource.Token);
+                using var deadline =
+                    CancellationTokenSource.CreateLinkedTokenSource(_pollingCancellationTokenSource.Token);
+
+                if (_heartbeatTimeoutMs > 0)
+                {
+                    var remaining = _heartbeatDeadline - Environment.TickCount64;
+                    deadline.CancelAfter(remaining > 0 ? TimeSpan.FromMilliseconds(remaining) : TimeSpan.Zero);
+                }
+
+                var packets = await _transport.GetAsync(deadline.Token);
 
                 foreach (var packet in packets)
                 {
                     // Handle heartbeat packet and yield the other packet types to the caller
                     if (packet.Type == PacketType.Ping)
                     {
+                        ResetHeartbeat();
                         await _transport.SendAsync(Packet.PongPacket, _pollingCancellationTokenSource.Token);
                         continue;
                     }
@@ -112,6 +140,13 @@ public sealed class Engine : IDisposable
                 }
             }
         }
+        catch (OperationCanceledException) when (!_pollingCancellationTokenSource.IsCancellationRequested)
+        {
+            // Only the heartbeat deadline can cancel while the engine is still running.
+            await _transport.Disconnect();
+            HandleException(new TransportException(ErrorReason.ConnectionClosed,
+                $"No ping received within {_heartbeatTimeoutMs}ms; the connection is considered closed."));
+        }
         catch (OperationCanceledException)
         {
             // Shutting down through DisconnectAsync is not a failure.
@@ -125,6 +160,11 @@ public sealed class Engine : IDisposable
         {
             writer.TryComplete();
         }
+    }
+
+    private void ResetHeartbeat()
+    {
+        _heartbeatDeadline = Environment.TickCount64 + _heartbeatTimeoutMs;
     }
 
     private void HandleException(Exception exception)

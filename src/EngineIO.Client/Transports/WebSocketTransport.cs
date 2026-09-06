@@ -59,7 +59,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     public string Name => "websocket";
 
-    public bool Connected => _connected = false;
+    public bool Connected => _connected;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -107,7 +107,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         var packets = new Collection<ReadOnlyMemory<byte>>();
         using var rent = MemoryPool<byte>.Shared.Rent(1);
         Memory<byte> buffer = rent.Memory;
-        
+
         try
         {
             await _receiveSemaphore.WaitAsync(CancellationToken.None);

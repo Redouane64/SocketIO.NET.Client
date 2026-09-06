@@ -11,6 +11,8 @@ namespace EngineIO.Client.Tests.Transports;
 /// </summary>
 internal sealed class FakeWebSocket : IWebSocket
 {
+    private readonly SemaphoreSlim _available = new(0);
+    private readonly object _gate = new();
     private readonly Queue<Frame> _inbound = new();
 
     public WebSocketState State { get; set; } = WebSocketState.Open;
@@ -37,51 +39,76 @@ internal sealed class FakeWebSocket : IWebSocket
 
     public void Queue(WebSocketMessageType type, byte[] payload, bool endOfMessage)
     {
-        _inbound.Enqueue(new Frame(type, payload, endOfMessage));
+        lock (_gate)
+        {
+            _inbound.Enqueue(new Frame(type, payload, endOfMessage));
+        }
+
+        _available.Release();
     }
 
     public Task ConnectAsync(Uri uri, CancellationToken cancellationToken)
     {
-        Calls.Add(nameof(ConnectAsync));
+        Record(nameof(ConnectAsync));
         return Task.CompletedTask;
     }
 
     public ValueTask SendAsync(ReadOnlyMemory<byte> buffer, WebSocketMessageType messageType, bool endOfMessage,
         CancellationToken cancellationToken)
     {
-        Calls.Add(nameof(SendAsync));
-        Sent.Add(new Frame(messageType, buffer.ToArray(), endOfMessage));
+        var frame = new Frame(messageType, buffer.ToArray(), endOfMessage);
+        lock (_gate)
+        {
+            Calls.Add(nameof(SendAsync));
+            Sent.Add(frame);
+        }
+
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer,
+    public async ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer,
         CancellationToken cancellationToken)
     {
-        Calls.Add(nameof(ReceiveAsync));
+        Record(nameof(ReceiveAsync));
 
-        if (_inbound.Count == 0)
+        // Wait for a frame the way a real socket does, rather than failing because
+        // the test has not queued the next one yet. The timeout keeps an
+        // under-scripted test failing instead of hanging.
+        if (!await _available.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken))
         {
             throw new InvalidOperationException("The test scripted no further frames to receive.");
         }
 
-        var frame = _inbound.Dequeue();
+        Frame frame;
+        lock (_gate)
+        {
+            frame = _inbound.Dequeue();
+        }
+
         frame.Payload.CopyTo(buffer.Span);
-        return ValueTask.FromResult(
-            new ValueWebSocketReceiveResult(frame.Payload.Length, frame.Type, frame.EndOfMessage));
+        return new ValueWebSocketReceiveResult(frame.Payload.Length, frame.Type, frame.EndOfMessage);
     }
 
     public Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription,
         CancellationToken cancellationToken)
     {
-        Calls.Add(nameof(CloseAsync));
+        Record(nameof(CloseAsync));
         State = WebSocketState.Closed;
         return Task.CompletedTask;
     }
 
     public void Abort()
     {
-        Calls.Add(nameof(Abort));
+        Record(nameof(Abort));
         State = WebSocketState.Aborted;
+    }
+
+    private void Record(string call)
+    {
+        lock (_gate)
+        {
+            Calls.Add(call);
+        }
     }
 
     public void Dispose()

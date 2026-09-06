@@ -2,6 +2,7 @@ using System.Text;
 
 using EngineIO.Client.Packets;
 using EngineIO.Client.Tests.Extensions;
+using EngineIO.Client.Tests.Transports;
 using EngineIO.Client.Transports.Exceptions;
 
 using Moq;
@@ -139,6 +140,75 @@ public class EngineTests
 
         Assert.Equal("polling", engine.TransportName);
         await Drain(engine);
+    }
+
+    [Fact]
+    async Task Should_Upgrade_To_Websocket_When_The_Server_Advertises_It()
+    {
+        var socket = new FakeWebSocket();
+        socket.QueueText("3probe");
+        var (engine, _) = CreateEngine(socket, Handshake());
+
+        await engine.ConnectAsync();
+
+        Assert.Equal("websocket", engine.TransportName);
+        await engine.DisconnectAsync();
+    }
+
+    [Fact]
+    async Task Should_Receive_Messages_Over_The_Websocket_After_Upgrading()
+    {
+        var socket = new FakeWebSocket();
+        socket.QueueText("3probe");
+        socket.QueueText("4Hello");
+        socket.QueueClose();
+        var (engine, requests) = CreateEngine(socket, Handshake());
+        await engine.ConnectAsync();
+
+        var received = await Drain(engine);
+
+        var packet = Assert.Single(received);
+        Assert.Equal("Hello", Encoding.UTF8.GetString(packet.Body.Span));
+
+        // Polling stopped at the handshake: nothing was long-polled after the upgrade.
+        Assert.Single(requests, request => request.Method == HttpMethod.Get);
+    }
+
+    [Fact]
+    async Task Should_Send_Over_The_Websocket_After_Upgrading()
+    {
+        var socket = new FakeWebSocket();
+        socket.QueueText("3probe");
+        var (engine, requests) = CreateEngine(socket, Handshake());
+        await engine.ConnectAsync();
+        socket.Sent.Clear();
+
+        await engine.SendAsync("Hi");
+
+        var frame = Assert.Single(socket.Sent);
+        Assert.Equal("4Hi", Encoding.UTF8.GetString(frame.Payload));
+        Assert.DoesNotContain(requests, request => request.Method == HttpMethod.Post);
+
+        await engine.DisconnectAsync();
+    }
+
+    private static (Engine Engine, List<CapturedRequest> Requests) CreateEngine(
+        FakeWebSocket socket, params byte[][] responses)
+    {
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        var requests = mockHttpMessageHandler.MockPollingServer(responses);
+        var httpClient = new HttpClient(mockHttpMessageHandler.Object)
+        {
+            BaseAddress = new Uri("http://foo.bar")
+        };
+
+        var engine = new Engine(options =>
+        {
+            options.BaseAddress = "http://foo.bar";
+            options.AutoUpgrade = true;
+        }, httpClient, socket);
+
+        return (engine, requests);
     }
 
     private static async Task<List<Packet>> Drain(Engine engine)

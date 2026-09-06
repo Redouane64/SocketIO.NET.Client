@@ -25,6 +25,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
 
     private readonly ClientOptions _clientOptions = new();
     private readonly HttpClient? _httpClient;
+    private readonly IWebSocket? _webSocket;
     private readonly ILogger<Engine>? _logger;
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
@@ -74,10 +75,11 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     ///     protocol behaviour can be exercised against a stubbed server.
     /// </summary>
     internal Engine(Action<ClientOptions> configure, HttpClient httpClient,
-        ILoggerFactory? loggerFactory = null)
+        IWebSocket? webSocket = null, ILoggerFactory? loggerFactory = null)
         : this(configure, loggerFactory)
     {
         _httpClient = httpClient;
+        _webSocket = webSocket;
     }
 
     public bool Connected => _transport.Connected;
@@ -157,7 +159,9 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         {
             try
             {
-                _transport = _wsTransport = new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!);
+                _transport = _wsTransport = _webSocket is null
+                    ? new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!)
+                    : new WebSocketTransport(_webSocket, _clientOptions.BaseAddress, _httpTransport.Sid!);
                 await _wsTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception)

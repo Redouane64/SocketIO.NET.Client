@@ -198,6 +198,90 @@ public class HttpPollingTransportTests
         Assert.Contains($"sid={sid}", requests[2].Uri.Query);
     }
 
+    [Fact]
+    async Task Should_Post_As_Text_Plain_Utf8()
+    {
+        var (transport, requests) = ConnectedTransport();
+        await transport.ConnectAsync(CancellationToken.None);
+
+        await transport.SendAsync(Packet.CreateMessagePacket("Hello"), CancellationToken.None);
+
+        var post = requests.Last();
+        Assert.Equal(HttpMethod.Post, post.Method);
+        Assert.Equal("text/plain; charset=utf-8", post.ContentType);
+        Assert.Equal("4Hello", Encoding.UTF8.GetString(post.Body));
+    }
+
+    [Fact]
+    async Task Should_Post_Binary_As_Base64_Behind_B_Prefix()
+    {
+        var body = new byte[] { 0x00, 0x01, 0xFE, 0xFF };
+        var (transport, requests) = ConnectedTransport();
+        await transport.ConnectAsync(CancellationToken.None);
+
+        await transport.SendAsync(Packet.CreateBinaryPacket(body), CancellationToken.None);
+
+        var post = requests.Last();
+
+        // Long-polling carries text only, so binary travels base64 behind a 'b'.
+        Assert.Equal("text/plain; charset=utf-8", post.ContentType);
+        Assert.Equal((byte)'b', post.Body[0]);
+        Assert.Equal(body, Convert.FromBase64String(Encoding.UTF8.GetString(post.Body.AsSpan(1))));
+    }
+
+    [Fact]
+    async Task Should_Reject_Packet_Larger_Than_MaxPayload()
+    {
+        var (transport, requests) = ConnectedTransport(maxPayload: 10);
+        await transport.ConnectAsync(CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<TransportException>(
+            () => transport.SendAsync(Packet.CreateMessagePacket(new string('x', 64)), CancellationToken.None));
+
+        Assert.Equal(ErrorReason.PayloadTooLarge, exception.ErrorReason);
+
+        // Rejected before it reached the wire: only the handshake was sent.
+        Assert.Single(requests);
+    }
+
+    [Fact]
+    async Task Should_Send_Close_Packet_On_Disconnect()
+    {
+        var (transport, requests) = ConnectedTransport();
+        await transport.ConnectAsync(CancellationToken.None);
+
+        await transport.Disconnect();
+
+        var post = requests.Last();
+        Assert.Equal(HttpMethod.Post, post.Method);
+        Assert.Equal("1", Encoding.UTF8.GetString(post.Body));
+    }
+
+    [Fact]
+    async Task Should_Send_Only_One_Close_Packet_When_Disconnected_Twice()
+    {
+        var (transport, requests) = ConnectedTransport();
+        await transport.ConnectAsync(CancellationToken.None);
+
+        await transport.Disconnect();
+        await transport.Disconnect();
+
+        Assert.Single(requests, request => request.Method == HttpMethod.Post);
+    }
+
+    private static (HttpPollingTransport Transport, List<CapturedRequest> Requests) ConnectedTransport(
+        int maxPayload = 1_000_000)
+    {
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        var requests = mockHttpMessageHandler.MockPollingServer(
+            Encoding.UTF8.GetBytes(Handshake("1NkM2QzZGMjEyMTIxCg", maxPayload)));
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        return (transport, requests);
+    }
+
     internal static string Handshake(string sid, int maxPayload = 1_000_000)
     {
         return $$"""0{"sid":"{{sid}}","maxPayload":{{maxPayload}},"pingTimeout":20000,"pingInterval":25000,"upgrades":["polling","websocket"]}""";

@@ -102,4 +102,61 @@ public class HttpPollingTransportTests
         Assert.Equal(upgrades, transport.Upgrades);
         Assert.Equal($"/engine.io?EIO=4&transport=polling&sid={sid}", transport.Path);
     }
+
+    [Theory(DisplayName = "Separators that enclose no payload are skipped")]
+    [InlineData("4Hi\u001e")]
+    [InlineData("\u001e4Hi")]
+    [InlineData("4Hi\u001e\u001e")]
+    async Task Should_Ignore_Empty_Payloads_Between_Separators(string response)
+    {
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        mockHttpMessageHandler.MockGetByteArrayAsync(Encoding.UTF8.GetBytes(response));
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        var packets = await transport.GetAsync(CancellationToken.None);
+
+        Assert.Single(packets);
+        Assert.Equal(PacketType.Message, packets[0].Type);
+        Assert.Equal("Hi", Encoding.UTF8.GetString(packets[0].Body.Span));
+    }
+
+    [Fact]
+    async Task Should_Decode_Base64_Binary_Packet()
+    {
+        var body = Encoding.UTF8.GetBytes("Hi");
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        mockHttpMessageHandler.MockGetByteArrayAsync(Encoding.UTF8.GetBytes($"b{Convert.ToBase64String(body)}"));
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        var packets = await transport.GetAsync(CancellationToken.None);
+
+        Assert.Single(packets);
+        Assert.Equal(PacketFormat.Binary, packets[0].Format);
+        Assert.Equal(PacketType.Message, packets[0].Type);
+
+        // The body must be the decoded bytes, not the base64 text that carried them.
+        Assert.True(packets[0].Body.Span.SequenceEqual(body));
+    }
+
+    [Fact]
+    async Task Should_Skip_Unparseable_Packet()
+    {
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        mockHttpMessageHandler.MockGetByteArrayAsync(new byte[]
+        {
+            0x01, (byte)'x', 0x1e, (byte)'4', (byte)'H', (byte)'i'
+        });
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        var packets = await transport.GetAsync(CancellationToken.None);
+
+        Assert.Single(packets);
+        Assert.Equal("Hi", Encoding.UTF8.GetString(packets[0].Body.Span));
+    }
 }

@@ -89,12 +89,18 @@ public sealed class Engine : IDisposable
             {
                 packets = await _transport.GetAsync(_pollingCancellationTokenSource.Token);
             }
+            catch (OperationCanceledException)
+            {
+                // Shutting down through DisconnectAsync is not a failure.
+                writer.TryComplete();
+                return;
+            }
             catch (Exception e)
             {
-                writer.Complete();
+                writer.TryComplete();
                 await _transport.Disconnect();
                 HandleException(e);
-                break;
+                return;
             }
 
             foreach (var data in packets)
@@ -118,9 +124,12 @@ public sealed class Engine : IDisposable
 
                 if (packet.Type == PacketType.Close)
                 {
-                    writer.Complete();
+                    // The server is done. Leave the loop entirely: `break` only left
+                    // the foreach, so the next iteration polled a closed transport,
+                    // threw, and completed the channel a second time.
+                    writer.TryComplete();
                     await _transport.Disconnect();
-                    break;
+                    return;
                 }
 
                 if (packet.Type == PacketType.Message)

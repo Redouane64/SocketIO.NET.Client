@@ -119,7 +119,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                 {
                     await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
                     packets.Add(new[] { (byte)PacketType.Close });
-                    break;
+                    return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
                 }
             } while (!result.EndOfMessage);
 

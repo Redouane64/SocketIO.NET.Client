@@ -79,14 +79,14 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             return;
         }
 
-        await _client.ConnectAsync(_uri, cancellationToken);
+        await _client.ConnectAsync(_uri, cancellationToken).ConfigureAwait(false);
 
         // ping probe
-        await SendAsync(Packet.PingProbePacket, cancellationToken);
+        await SendAsync(Packet.PingProbePacket, cancellationToken).ConfigureAwait(false);
 
         // pong probe: the reply must echo the "probe" payload we just sent, otherwise
         // it is an unrelated pong and the upgrade has not been acknowledged.
-        var packets = await GetAsync(cancellationToken);
+        var packets = await GetAsync(cancellationToken).ConfigureAwait(false);
         if (packets.Count == 0
             || packets[0].Type != PacketType.Pong
             || !packets[0].Body.Span.SequenceEqual(Packet.PingProbePacket.Body.Span))
@@ -95,7 +95,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         }
 
         // upgrade
-        await SendAsync(Packet.UpgradePacket, cancellationToken);
+        await SendAsync(Packet.UpgradePacket, cancellationToken).ConfigureAwait(false);
 
         _connected = true;
     }
@@ -113,12 +113,12 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         {
             // Tell the server we are going away, then run the WebSocket close
             // handshake instead of aborting the socket underneath it.
-            await SendAsync(Packet.ClosePacket);
+            await SendAsync(Packet.ClosePacket).ConfigureAwait(false);
 
             if (_client.State == WebSocketState.Open)
             {
                 using var timeout = new CancellationTokenSource(CloseTimeout);
-                await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, timeout.Token);
+                await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, timeout.Token).ConfigureAwait(false);
             }
         }
         catch (Exception exception) when (
@@ -131,7 +131,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     public async Task<IReadOnlyList<Packet>> GetAsync(CancellationToken cancellationToken = default)
     {
-        await _receiveSemaphore.WaitAsync(cancellationToken);
+        await _receiveSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -145,10 +145,10 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
             do
             {
-                result = await _client.ReceiveAsync(buffer, cancellationToken);
+                result = await _client.ReceiveAsync(buffer, cancellationToken).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+                    await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).ConfigureAwait(false);
                     _connected = false;
                     return new[] { Packet.ClosePacket };
                 }
@@ -199,11 +199,11 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         var payload = binary ? packet.Body : packet.ToPlaintextPacket();
         var messageType = binary ? WebSocketMessageType.Binary : WebSocketMessageType.Text;
 
-        await _sendSemaphore.WaitAsync(cancellationToken);
+        await _sendSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            await _client.SendAsync(payload, messageType, true, cancellationToken);
+            await _client.SendAsync(payload, messageType, true, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

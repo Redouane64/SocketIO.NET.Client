@@ -81,7 +81,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         {
             try
             {
-                await _pollingTask;
+                await _pollingTask.ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -124,7 +124,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         _transport = _httpTransport = new HttpPollingTransport(_clientOptions.BaseAddress);
         try
         {
-            await _httpTransport.ConnectAsync(cancellationToken);
+            await _httpTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -137,7 +137,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
             try
             {
                 _transport = _wsTransport = new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!);
-                await _wsTransport.ConnectAsync(cancellationToken);
+                await _wsTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -172,7 +172,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         {
             while (!_pollingCancellationTokenSource.IsCancellationRequested)
             {
-                var packets = await _transport.GetAsync(_receiveToken);
+                var packets = await _transport.GetAsync(_receiveToken).ConfigureAwait(false);
 
                 foreach (var packet in packets)
                 {
@@ -180,7 +180,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
                     if (packet.Type == PacketType.Ping)
                     {
                         ResetHeartbeat();
-                        await _transport.SendAsync(Packet.PongPacket, _pollingCancellationTokenSource.Token);
+                        await _transport.SendAsync(Packet.PongPacket, _pollingCancellationTokenSource.Token).ConfigureAwait(false);
                         continue;
                     }
 
@@ -189,7 +189,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
                     // a transport that has just been disconnected.
                     if (packet.Type == PacketType.Close)
                     {
-                        await _transport.Disconnect();
+                        await _transport.Disconnect().ConfigureAwait(false);
                         return;
                     }
 
@@ -204,7 +204,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         catch (OperationCanceledException) when (!_pollingCancellationTokenSource.IsCancellationRequested)
         {
             // Only the heartbeat deadline can cancel while the engine is still running.
-            await _transport.Disconnect();
+            await _transport.Disconnect().ConfigureAwait(false);
             HandleException(new TransportException(ErrorReason.ConnectionClosed,
                 $"No ping received within {_heartbeatTimeoutMs}ms; the connection is considered closed."));
         }
@@ -214,7 +214,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         }
         catch (Exception e)
         {
-            await _transport.Disconnect();
+            await _transport.Disconnect().ConfigureAwait(false);
             HandleException(e);
         }
         finally
@@ -243,7 +243,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
             // Close first, cancel second. Cancelling aborts the in-flight long poll,
             // which the server treats as the transport going away: it discards the
             // session, and the close packet then arrives on a session that is gone.
-            await _transport.Disconnect();
+            await _transport.Disconnect().ConfigureAwait(false);
         }
         finally
         {
@@ -253,7 +253,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         // Let the loop unwind before returning, so the caller can dispose safely.
         if (_pollingTask is not null)
         {
-            await _pollingTask;
+            await _pollingTask.ConfigureAwait(false);
         }
     }
 
@@ -267,7 +267,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         var reader = _packetsChannel.Reader;
         var listenerCancellationToken = CancellationTokenSource.CreateLinkedTokenSource(this._pollingCancellationTokenSource.Token,
             cancellationToken);
-        while (await reader.WaitToReadAsync(listenerCancellationToken.Token))
+        while (await reader.WaitToReadAsync(listenerCancellationToken.Token).ConfigureAwait(false))
         {
             while (reader.TryRead(out var packet))
             {
@@ -283,7 +283,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     /// <param name="cancellationToken"></param>
     public async Task SendAsync(string text, CancellationToken cancellationToken = default)
     {
-        await _transport.SendAsync(Packet.CreateMessagePacket(text), cancellationToken);
+        await _transport.SendAsync(Packet.CreateMessagePacket(text), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -293,6 +293,6 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     /// <param name="cancellationToken"></param>
     public async Task SendAsync(ReadOnlyMemory<byte> binary, CancellationToken cancellationToken = default)
     {
-        await _transport.SendAsync(Packet.CreateBinaryPacket(binary), cancellationToken);
+        await _transport.SendAsync(Packet.CreateBinaryPacket(binary), cancellationToken).ConfigureAwait(false);
     }
 }

@@ -84,19 +84,19 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         // Clear the flag before awaiting, so a concurrent caller — the poll loop
         // reacting to the same shutdown — does not post a second close packet.
         _connected = false;
-        await SendAsync(Packet.ClosePacket);
+        await SendAsync(Packet.ClosePacket).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<Packet>> GetAsync(CancellationToken cancellationToken = default)
     {
         byte[] data;
-        await _getSemaphore.WaitAsync(cancellationToken);
+        await _getSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            using var response = await _httpClient.GetAsync(_requestUri, cancellationToken);
+            using var response = await _httpClient.GetAsync(_requestUri, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-            data = await response.Content.ReadAsByteArrayAsync();
+            data = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -140,7 +140,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
                 $"Packet is {payload.Length} bytes, which exceeds the server's maxPayload of {MaxPayload} bytes.");
         }
 
-        await _postSemaphore.WaitAsync(cancellationToken);
+        await _postSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -151,7 +151,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             content.Headers.ContentType =
                 new MediaTypeHeaderValue("text/plain") { CharSet = Encoding.UTF8.WebName };
 
-            using var response = await _httpClient.PostAsync(_requestUri, content, cancellationToken);
+            using var response = await _httpClient.PostAsync(_requestUri, content, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
         }
         finally
@@ -167,7 +167,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             return;
         }
 
-        var response = await GetAsync(cancellationToken);
+        var response = await GetAsync(cancellationToken).ConfigureAwait(false);
 
         if (response.Count == 0 || response[0].Type != PacketType.Open)
         {

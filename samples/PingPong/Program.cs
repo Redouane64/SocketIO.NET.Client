@@ -32,7 +32,7 @@ internal class Program : IDisposable
                 o.ColorBehavior = LoggerColorBehavior.Enabled;
             }).SetMinimumLevel(LogLevel.Debug);
         });
-        
+
         this.logger = this.loggerFactory.CreateLogger<Program>();
 #else
         this.loggerFactory = NullLoggerFactory.Instance;

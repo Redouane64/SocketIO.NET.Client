@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -82,63 +81,56 @@ public sealed class Engine : IDisposable
     {
         var writer = _packetsChannel.Writer;
 
-        while (!_pollingCancellationTokenSource.IsCancellationRequested)
+        try
         {
-            ReadOnlyCollection<ReadOnlyMemory<byte>> packets;
-            try
+            while (!_pollingCancellationTokenSource.IsCancellationRequested)
             {
-                packets = await _transport.GetAsync(_pollingCancellationTokenSource.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                // Shutting down through DisconnectAsync is not a failure.
-                writer.TryComplete();
-                return;
-            }
-            catch (Exception e)
-            {
-                writer.TryComplete();
-                await _transport.Disconnect();
-                HandleException(e);
-                return;
-            }
+                var packets = await _transport.GetAsync(_pollingCancellationTokenSource.Token);
 
-            foreach (var data in packets)
-            {
-                if (!Packet.TryParse(data, out var packet))
+                foreach (var data in packets)
                 {
-                    continue;
-                }
+                    if (!Packet.TryParse(data, out var packet))
+                    {
+                        continue;
+                    }
 
-                // Handle heartbeat packet and yield the other packet types to the caller
-                if (packet.Type == PacketType.Ping)
-                {
+                    // Handle heartbeat packet and yield the other packet types to the caller
+                    if (packet.Type == PacketType.Ping)
+                    {
+                        await _transport.SendAsync(Packet.PongPacket.ToPlaintextPacket(), PacketFormat.PlainText,
+                            _pollingCancellationTokenSource.Token);
+                        continue;
+                    }
 
-#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
-                    _transport.SendAsync(Packet.PongPacket.ToPlaintextPacket(), PacketFormat.PlainText,
-                        _pollingCancellationTokenSource.Token);
-#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+                    // The server is done. Leaving the loop entirely matters: `break`
+                    // would only leave the foreach, and the next iteration would poll
+                    // a transport that has just been disconnected.
+                    if (packet.Type == PacketType.Close)
+                    {
+                        await _transport.Disconnect();
+                        return;
+                    }
 
-                    continue;
-                }
-
-                if (packet.Type == PacketType.Close)
-                {
-                    // The server is done. Leave the loop entirely: `break` only left
-                    // the foreach, so the next iteration polled a closed transport,
-                    // threw, and completed the channel a second time.
-                    writer.TryComplete();
-                    await _transport.Disconnect();
-                    return;
-                }
-
-                if (packet.Type == PacketType.Message)
-                {
-#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
-                    writer.WriteAsync(packet, _pollingCancellationTokenSource.Token);
-#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+                    if (packet.Type == PacketType.Message)
+                    {
+                        // The channel is unbounded, so this never fails or blocks.
+                        writer.TryWrite(packet);
+                    }
                 }
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down through DisconnectAsync is not a failure.
+        }
+        catch (Exception e)
+        {
+            await _transport.Disconnect();
+            HandleException(e);
+        }
+        finally
+        {
+            writer.TryComplete();
         }
     }
 

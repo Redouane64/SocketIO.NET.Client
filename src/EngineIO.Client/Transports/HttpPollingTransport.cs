@@ -19,7 +19,16 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     private readonly HttpClient _httpClient;
 
     private readonly int _protocol = 4;
-    private readonly SemaphoreSlim _semaphore = new(1, 1);
+    /// <summary>
+    ///     Guards the long-polling GET. The protocol allows at most one in flight.
+    /// </summary>
+    private readonly SemaphoreSlim _getSemaphore = new(1, 1);
+
+    /// <summary>
+    ///     Guards POSTs. Kept separate from the GET so that sending a packet does
+    ///     not have to wait for the in-flight long poll to return.
+    /// </summary>
+    private readonly SemaphoreSlim _postSemaphore = new(1, 1);
     private readonly byte _separator = 0x1E;
 
     private bool _connected;
@@ -48,7 +57,8 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public void Dispose()
     {
         _httpClient.Dispose();
-        _semaphore.Dispose();
+        _getSemaphore.Dispose();
+        _postSemaphore.Dispose();
     }
 
     public string Name => "polling";
@@ -68,7 +78,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
     {
         byte[] data;
-        await _semaphore.WaitAsync(cancellationToken);
+        await _getSemaphore.WaitAsync(cancellationToken);
 
         try
         {
@@ -78,7 +88,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
         finally
         {
-            _semaphore.Release();
+            _getSemaphore.Release();
         }
 
         var packets = new List<ReadOnlyMemory<byte>>();
@@ -106,7 +116,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
         CancellationToken cancellationToken = default)
     {
-        await _semaphore.WaitAsync(cancellationToken);
+        await _postSemaphore.WaitAsync(cancellationToken);
 
         try
         {
@@ -120,7 +130,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         }
         finally
         {
-            _semaphore.Release();
+            _postSemaphore.Release();
         }
     }
 

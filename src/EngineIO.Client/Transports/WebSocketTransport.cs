@@ -70,6 +70,11 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     public string Name => "websocket";
 
+    /// <summary>
+    ///     The endpoint this transport connects to, derived from the base address.
+    /// </summary>
+    internal Uri Uri => _uri;
+
     public bool Connected => _connected;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)

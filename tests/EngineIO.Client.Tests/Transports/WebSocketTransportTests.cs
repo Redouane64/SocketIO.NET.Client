@@ -141,6 +141,45 @@ public sealed class WebSocketTransportTests
         Assert.DoesNotContain("Abort", socket.Calls);
     }
 
+    [Fact]
+    async Task Should_Probe_Then_Upgrade_On_Connect()
+    {
+        var (transport, socket) = ConnectedTransport();
+
+        await transport.ConnectAsync(CancellationToken.None);
+
+        // ping "probe", read the pong "probe", then commit with an upgrade packet.
+        Assert.Equal(new[] { "2probe", "5" }, socket.Sent.Select(f => Encoding.UTF8.GetString(f.Payload)));
+        Assert.All(socket.Sent, frame => Assert.Equal(WebSocketMessageType.Text, frame.Type));
+        Assert.Equal(new[] { "ConnectAsync", "SendAsync", "ReceiveAsync", "SendAsync" }, socket.Calls);
+    }
+
+    [Fact]
+    async Task Should_Not_Send_Upgrade_When_The_Probe_Is_Not_Answered()
+    {
+        var socket = new FakeWebSocket();
+        socket.QueueText("3");
+        using var transport = new WebSocketTransport(socket, "http://example.com", "sid");
+
+        await Assert.ThrowsAsync<TransportException>(() => transport.ConnectAsync(CancellationToken.None));
+
+        // Only the probe went out: the upgrade must not be committed.
+        var frame = Assert.Single(socket.Sent);
+        Assert.Equal("2probe", Encoding.UTF8.GetString(frame.Payload));
+    }
+
+    [Fact]
+    async Task Connected_Should_Be_True_Only_After_The_Upgrade_Completes()
+    {
+        var (transport, _) = ConnectedTransport();
+
+        Assert.False(transport.Connected);
+        await transport.ConnectAsync(CancellationToken.None);
+
+        Assert.True(transport.Connected);
+        Assert.True(transport.Connected);
+    }
+
     private static (WebSocketTransport Transport, FakeWebSocket Socket) ConnectedTransport()
     {
         var socket = new FakeWebSocket();

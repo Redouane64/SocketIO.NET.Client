@@ -186,7 +186,10 @@ public sealed class Engine : IDisposable, IAsyncDisposable
             _receiveToken = _pollingCancellationTokenSource.Token;
         }
 
-        _pollingTask = Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
+        // No token here on purpose: Task.Run would cancel the task before the loop
+        // ever ran, and the finally that completes the packet channel would be
+        // skipped. PollAsync observes the token itself and exits on the first check.
+        _pollingTask = Task.Run(PollAsync);
     }
 
     private async Task PollAsync()

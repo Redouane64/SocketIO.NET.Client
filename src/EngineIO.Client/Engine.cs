@@ -16,6 +16,11 @@ namespace EngineIO.Client;
 
 public sealed class Engine : IDisposable
 {
+    /// <summary>
+    ///     How long <see cref="Dispose" /> waits for the receive loop to unwind.
+    /// </summary>
+    private static readonly TimeSpan PollingShutdownTimeout = TimeSpan.FromSeconds(5);
+
     private readonly ClientOptions _clientOptions = new();
     private readonly ILogger<Engine>? _logger;
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
@@ -32,6 +37,12 @@ public sealed class Engine : IDisposable
     ///     considered dead if no ping has arrived.
     /// </summary>
     private long _heartbeatDeadline;
+
+    /// <summary>
+    ///     The receive loop, kept so that shutdown can wait for it to unwind before
+    ///     anything it uses is torn down.
+    /// </summary>
+    private Task? _pollingTask;
 
 #nullable disable
     private ITransport _transport;
@@ -52,8 +63,21 @@ public sealed class Engine : IDisposable
 
     public void Dispose()
     {
+        _pollingCancellationTokenSource.Cancel();
+
+        // The receive loop holds the transports and their semaphores. Disposing those
+        // while it is still running makes it fail on a disposed object.
+        try
+        {
+            _pollingTask?.Wait(PollingShutdownTimeout);
+        }
+        catch (AggregateException)
+        {
+            // PollAsync reports its own failures through the logger.
+        }
+
         _pollingCancellationTokenSource.Dispose();
-        _httpTransport.Dispose();
+        _httpTransport?.Dispose();
         _wsTransport?.Dispose();
     }
 
@@ -89,9 +113,7 @@ public sealed class Engine : IDisposable
         _heartbeatTimeoutMs = _httpTransport.PingInterval + _httpTransport.PingTimeout;
         ResetHeartbeat();
 
-#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
-        Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
-#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+        _pollingTask = Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
     }
 
     private async Task PollAsync()
@@ -186,6 +208,12 @@ public sealed class Engine : IDisposable
         finally
         {
             _pollingCancellationTokenSource.Cancel();
+        }
+
+        // Let the loop unwind before returning, so the caller can dispose safely.
+        if (_pollingTask is not null)
+        {
+            await _pollingTask;
         }
     }
 

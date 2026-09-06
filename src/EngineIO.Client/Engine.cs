@@ -253,7 +253,11 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     private void HandleException(Exception exception)
     {
         _logger?.LogError(exception, exception.Message);
-        // TODO: clean up
+
+        // End the stream with the reason it ended. A listener can then tell a
+        // connection that died from one the server closed by agreement, which
+        // completes the channel without an error.
+        _packetsChannel.Writer.TryComplete(exception);
         _pollingCancellationTokenSource.Cancel();
     }
 
@@ -286,9 +290,11 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     public async IAsyncEnumerable<Packet> ListenAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var reader = _packetsChannel.Reader;
-        var listenerCancellationToken = CancellationTokenSource.CreateLinkedTokenSource(this._pollingCancellationTokenSource.Token,
-            cancellationToken);
-        while (await reader.WaitToReadAsync(listenerCancellationToken.Token).ConfigureAwait(false))
+
+        // Only the caller's token cancels the enumeration. The engine signals the end
+        // of the stream by completing the channel, so linking the polling token here
+        // would race that completion and surface a cancellation instead of the reason.
+        while (await reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
         {
             while (reader.TryRead(out var packet))
             {

@@ -2,6 +2,7 @@ using System.Text;
 
 using EngineIO.Client.Packets;
 using EngineIO.Client.Tests.Extensions;
+using EngineIO.Client.Transports.Exceptions;
 
 using Moq;
 
@@ -71,10 +72,35 @@ public class EngineTests
 
         await Task.Delay(500);
 
-        // The spec rule is that the client treats the connection as closed. How the
-        // listener terminates is deliberately not asserted: a server close completes
-        // it, while the watchdog currently cancels it.
         Assert.False(engine.Connected);
+    }
+
+    [Fact]
+    async Task Should_Fault_Listener_With_The_Reason_When_The_Connection_Dies()
+    {
+        var (engine, _) = CreateEngine(TimeSpan.FromMilliseconds(20),
+            Handshake(pingInterval: 50, pingTimeout: 50), Packet("6"));
+        await engine.ConnectAsync();
+
+        // A connection that died is not the same as one the server closed: the
+        // listener carries the reason instead of ending as if all were well.
+        var exception = await Assert.ThrowsAsync<TransportException>(() => Drain(engine));
+
+        Assert.Equal(ErrorReason.ConnectionClosed, exception.ErrorReason);
+        Assert.Contains("No ping received", exception.Message);
+    }
+
+    [Fact]
+    async Task Should_Fault_Listener_When_The_Handshake_Fails()
+    {
+        var (engine, _) = CreateEngine(Packet("4Hello"));
+
+        await engine.ConnectAsync();
+
+        // The poll loop never starts, so nothing else would ever end the stream.
+        var exception = await Assert.ThrowsAsync<TransportException>(() => Drain(engine));
+
+        Assert.Equal(ErrorReason.InvalidPacket, exception.ErrorReason);
     }
 
     [Fact]

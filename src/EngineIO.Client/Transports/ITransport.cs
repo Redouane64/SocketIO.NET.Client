@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -39,7 +39,7 @@ public interface ITransport
     /// single packet whose binary form has no packet type prefix at all.
     /// </remarks>
     /// <returns>The packets carried by one read.</returns>
-    Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Packet>> GetAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Send a packet, encoded for this transport's wire format.

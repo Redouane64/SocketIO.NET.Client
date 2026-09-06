@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -88,7 +87,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         await SendAsync(Packet.ClosePacket);
     }
 
-    public async Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Packet>> GetAsync(CancellationToken cancellationToken = default)
     {
         byte[] data;
         await _getSemaphore.WaitAsync(cancellationToken);
@@ -121,7 +120,9 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             Decode(new ReadOnlyMemory<byte>(data, start, data.Length - start), packets);
         }
 
-        return new ReadOnlyCollection<Packet>(packets);
+        // The list is built here and never retained, so it can be handed out as the
+        // read-only view directly rather than wrapped in another object.
+        return packets;
     }
 
     public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)
@@ -166,7 +167,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             return;
         }
 
-        ReadOnlyCollection<Packet> response = await GetAsync(cancellationToken);
+        var response = await GetAsync(cancellationToken);
 
         if (response.Count == 0 || response[0].Type != PacketType.Open)
         {

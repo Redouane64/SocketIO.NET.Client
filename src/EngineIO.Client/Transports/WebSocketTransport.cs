@@ -1,6 +1,6 @@
 using System;
 using System.Buffers;
-using System.Collections.ObjectModel;
+using System.Collections.Generic;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -129,9 +129,8 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         }
     }
 
-    public async Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Packet>> GetAsync(CancellationToken cancellationToken = default)
     {
-        var packets = new Collection<Packet>();
         await _receiveSemaphore.WaitAsync(cancellationToken);
 
         try
@@ -151,8 +150,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                 {
                     await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
                     _connected = false;
-                    packets.Add(Packet.ClosePacket);
-                    return new ReadOnlyCollection<Packet>(packets);
+                    return new[] { Packet.ClosePacket };
                 }
 
                 if (result.EndOfMessage && message is null)
@@ -171,23 +169,21 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             // not owned by the caller, and the rented buffer returns to the pool here.
             payload ??= message!.WrittenSpan.ToArray();
 
+            // A binary frame is the message payload itself, sent as-is. There is no
+            // packet type byte to parse off the front.
             if (result.MessageType == WebSocketMessageType.Binary)
             {
-                // A binary frame is the message payload itself, sent as-is. There is
-                // no packet type byte to parse off the front.
-                packets.Add(Packet.CreateBinaryPacket(payload));
+                return new[] { Packet.CreateBinaryPacket(payload) };
             }
-            else if (Packet.TryParse(payload, out var packet))
-            {
-                packets.Add(packet);
-            }
+
+            return Packet.TryParse(payload, out var packet)
+                ? new[] { packet }
+                : Array.Empty<Packet>();
         }
         finally
         {
             _receiveSemaphore.Release();
         }
-
-        return new ReadOnlyCollection<Packet>(packets);
     }
 
     public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)

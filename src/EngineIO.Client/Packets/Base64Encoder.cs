@@ -10,4 +10,10 @@ public class Base64Encoder : IEncoder
         var base64 = Convert.ToBase64String(data.Span);
         return new ReadOnlyMemory<byte>(encoding.GetBytes(base64));
     }
+
+    public ReadOnlyMemory<byte> Decode(ReadOnlyMemory<byte> data, Encoding encoding)
+    {
+        var base64 = encoding.GetString(data.Span);
+        return new ReadOnlyMemory<byte>(Convert.FromBase64String(base64));
+    }
 }

@@ -171,6 +171,18 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     private void Decode(ReadOnlyMemory<byte> payload, ICollection<Packet> packets)
     {
+        if (payload.Length == 0)
+        {
+            return;
+        }
+
+        // A 'b' prefix marks a base64-encoded binary message packet.
+        if (payload.Span[0] == (byte)'b')
+        {
+            packets.Add(Packet.CreateBinaryPacket(_encoder.Decode(payload[1..], Encoding.UTF8)));
+            return;
+        }
+
         if (Packet.TryParse(payload, out var packet))
         {
             packets.Add(packet);

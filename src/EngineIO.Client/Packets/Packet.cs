@@ -22,8 +22,13 @@ public readonly struct Packet
     public static readonly Packet UpgradePacket = new(PacketFormat.PlainText, PacketType.Upgrade, Array.Empty<byte>());
 
     /// <summary>
-    ///     Parse packet from raw payload.
+    ///     Parse a plain-text packet from a raw payload.
     /// </summary>
+    /// <remarks>
+    ///     Binary framing is transport-specific — base64 behind a 'b' prefix for
+    ///     long-polling, a bare binary frame for WebSocket — so it is decoded by the
+    ///     transport rather than here.
+    /// </remarks>
     /// <param name="data">Buffer or raw payload</param>
     /// <param name="packet">Parsed Packet instance</param>
     /// <returns>Boolean indicating success or failure of parse operation</returns>
@@ -35,16 +40,14 @@ public readonly struct Packet
             return false;
         }
 
-        var format = data.Span[0] == 98 ? PacketFormat.Binary : PacketFormat.PlainText;
-        var type = format == PacketFormat.PlainText ? (PacketType)data.Span[0] : PacketType.Message;
+        var type = (PacketType)data.Span[0];
         if (!Enum.IsDefined(typeof(PacketType), type))
         {
             packet = default;
             return false;
         }
 
-        var content = data[1..];
-        packet = new Packet(format, type, content);
+        packet = new Packet(PacketFormat.PlainText, type, data[1..]);
         return true;
     }
 

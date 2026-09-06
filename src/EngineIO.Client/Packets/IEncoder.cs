@@ -6,4 +6,6 @@ namespace EngineIO.Client.Packets;
 public interface IEncoder
 {
     ReadOnlyMemory<byte> Encode(ReadOnlyMemory<byte> data, Encoding encoding);
+
+    ReadOnlyMemory<byte> Decode(ReadOnlyMemory<byte> data, Encoding encoding);
 }

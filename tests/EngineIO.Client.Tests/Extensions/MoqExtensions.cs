@@ -31,6 +31,16 @@ public static class MoqExtensions
     public static List<CapturedRequest> MockPollingServer(
         this Mock<HttpMessageHandler> handler, params byte[][] pollResponses)
     {
+        return handler.MockPollingServer(TimeSpan.Zero, pollResponses);
+    }
+
+    /// <summary>
+    ///     As above, but each GET takes <paramref name="pollDelay" /> to answer, the way
+    ///     a real long poll does. Keeps a poll loop from spinning in tests that wait.
+    /// </summary>
+    public static List<CapturedRequest> MockPollingServer(
+        this Mock<HttpMessageHandler> handler, TimeSpan pollDelay, params byte[][] pollResponses)
+    {
         var requests = new List<CapturedRequest>();
         var polls = 0;
 
@@ -51,6 +61,11 @@ public static class MoqExtensions
                 if (request.Method != HttpMethod.Get)
                 {
                     return Ok("ok"u8.ToArray());
+                }
+
+                if (pollDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(pollDelay);
                 }
 
                 if (pollResponses.Length == 0)

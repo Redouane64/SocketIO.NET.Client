@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
@@ -23,6 +24,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     private static readonly TimeSpan PollingShutdownTimeout = TimeSpan.FromSeconds(5);
 
     private readonly ClientOptions _clientOptions = new();
+    private readonly HttpClient? _httpClient;
     private readonly ILogger<Engine>? _logger;
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
@@ -67,7 +69,24 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    ///     Drives the polling transport from a supplied <see cref="HttpClient" />, so the
+    ///     protocol behaviour can be exercised against a stubbed server.
+    /// </summary>
+    internal Engine(Action<ClientOptions> configure, HttpClient httpClient,
+        ILoggerFactory? loggerFactory = null)
+        : this(configure, loggerFactory)
+    {
+        _httpClient = httpClient;
+    }
+
     public bool Connected => _transport.Connected;
+
+    /// <summary>
+    ///     Name of the transport currently in use, so tests can tell whether the
+    ///     connection upgraded.
+    /// </summary>
+    internal string TransportName => _transport.Name;
 
     /// <summary>
     ///     Preferred over <see cref="Dispose" />: waits for the receive loop without
@@ -121,7 +140,9 @@ public sealed class Engine : IDisposable, IAsyncDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        _transport = _httpTransport = new HttpPollingTransport(_clientOptions.BaseAddress);
+        _transport = _httpTransport = _httpClient is null
+            ? new HttpPollingTransport(_clientOptions.BaseAddress)
+            : new HttpPollingTransport(_httpClient);
         try
         {
             await _httpTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);

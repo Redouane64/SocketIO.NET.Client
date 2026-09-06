@@ -70,12 +70,15 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     public async Task Disconnect()
     {
-        if (_connected)
+        if (!_connected)
         {
-            await SendAsync(Packet.ClosePacket);
+            return;
         }
 
+        // Clear the flag before awaiting, so a concurrent caller — the poll loop
+        // reacting to the same shutdown — does not post a second close packet.
         _connected = false;
+        await SendAsync(Packet.ClosePacket);
     }
 
     public async Task<ReadOnlyCollection<Packet>> GetAsync(CancellationToken cancellationToken = default)

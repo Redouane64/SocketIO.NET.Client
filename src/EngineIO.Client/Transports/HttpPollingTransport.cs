@@ -36,20 +36,28 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     private bool _connected;
 
+    private string _path = null!;
+
+    /// <summary>
+    ///     <see cref="Path" /> pre-parsed. Passing the path as a string would make
+    ///     HttpClient build this again on every request.
+    /// </summary>
+    private Uri _requestUri = null!;
+
     public HttpPollingTransport(string baseAddress)
     {
         _httpClient = new HttpClient();
         _httpClient.BaseAddress = new Uri(baseAddress);
-        Path = $"/engine.io?EIO={_protocol}&transport={Name}";
+        SetPath($"/engine.io?EIO={_protocol}&transport={Name}");
     }
 
     internal HttpPollingTransport(HttpClient httpClient)
     {
         _httpClient = httpClient;
-        Path = $"/engine.io?EIO={_protocol}&transport={Name}";
+        SetPath($"/engine.io?EIO={_protocol}&transport={Name}");
     }
 
-    public string Path { get; private set; }
+    public string Path => _path;
 
     public string? Sid { get; private set; }
     public string[]? Upgrades { get; private set; }
@@ -88,7 +96,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
         try
         {
-            using var response = await _httpClient.GetAsync(Path, cancellationToken);
+            using var response = await _httpClient.GetAsync(_requestUri, cancellationToken);
             response.EnsureSuccessStatusCode();
             data = await response.Content.ReadAsByteArrayAsync();
         }
@@ -143,7 +151,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             content.Headers.ContentType =
                 new MediaTypeHeaderValue("text/plain") { CharSet = Encoding.UTF8.WebName };
 
-            using var response = await _httpClient.PostAsync(Path, content, cancellationToken);
+            using var response = await _httpClient.PostAsync(_requestUri, content, cancellationToken);
             response.EnsureSuccessStatusCode();
         }
         finally
@@ -175,8 +183,14 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         PingTimeout = handshake.PingTimeout;
         Upgrades = handshake.Upgrades;
 
-        Path += $"&sid={Sid}";
+        SetPath($"{_path}&sid={Sid}");
         _connected = true;
+    }
+
+    private void SetPath(string path)
+    {
+        _path = path;
+        _requestUri = new Uri(path, UriKind.Relative);
     }
 
     private void Decode(ReadOnlyMemory<byte> payload, ICollection<Packet> packets)

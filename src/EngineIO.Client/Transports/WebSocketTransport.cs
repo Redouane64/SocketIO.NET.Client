@@ -59,7 +59,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     public string Name => "websocket";
 
-    public bool Connected => _connected = false;
+    public bool Connected => _connected;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {

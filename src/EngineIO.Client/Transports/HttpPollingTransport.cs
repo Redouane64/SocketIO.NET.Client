@@ -53,7 +53,7 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
 
     public string Name => "polling";
 
-    public bool Connected => _connected = false;
+    public bool Connected => _connected;
 
     public async Task Disconnect()
     {

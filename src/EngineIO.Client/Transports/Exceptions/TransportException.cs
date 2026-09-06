@@ -6,6 +6,7 @@ public enum ErrorReason
 {
     InvalidPacket,
     ConnectionClosed,
+    PayloadTooLarge,
 }
 
 public class TransportException : Exception

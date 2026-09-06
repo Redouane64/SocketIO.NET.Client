@@ -122,6 +122,13 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
             ? packet.ToBinaryPacket(_encoder)
             : packet.ToPlaintextPacket();
 
+        // The handshake advertises how much the server will accept in one request.
+        if (MaxPayload > 0 && payload.Length > MaxPayload)
+        {
+            throw new TransportException(ErrorReason.PayloadTooLarge,
+                $"Packet is {payload.Length} bytes, which exceeds the server's maxPayload of {MaxPayload} bytes.");
+        }
+
         await _postSemaphore.WaitAsync(cancellationToken);
 
         try

@@ -84,9 +84,12 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         // ping probe
         await SendAsync(Packet.PingProbePacket, cancellationToken);
 
-        // pong probe
+        // pong probe: the reply must echo the "probe" payload we just sent, otherwise
+        // it is an unrelated pong and the upgrade has not been acknowledged.
         var packets = await GetAsync(cancellationToken);
-        if (packets.Count == 0 || packets[0].Type != PacketType.Pong)
+        if (packets.Count == 0
+            || packets[0].Type != PacketType.Pong
+            || !packets[0].Body.Span.SequenceEqual(Packet.PingProbePacket.Body.Span))
         {
             throw new TransportException(ErrorReason.InvalidPacket);
         }

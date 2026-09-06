@@ -3,6 +3,7 @@ using System.Text;
 using EngineIO.Client.Packets;
 using EngineIO.Client.Tests.Extensions;
 using EngineIO.Client.Transports;
+using EngineIO.Client.Transports.Exceptions;
 
 using Moq;
 
@@ -101,5 +102,219 @@ public class HttpPollingTransportTests
         Assert.Equal(pingTimeout, transport.PingTimeout);
         Assert.Equal(upgrades, transport.Upgrades);
         Assert.Equal($"/engine.io?EIO=4&transport=polling&sid={sid}", transport.Path);
+    }
+
+    [Theory(DisplayName = "Separators that enclose no payload are skipped")]
+    [InlineData("4Hi\u001e")]
+    [InlineData("\u001e4Hi")]
+    [InlineData("4Hi\u001e\u001e")]
+    async Task Should_Ignore_Empty_Payloads_Between_Separators(string response)
+    {
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        mockHttpMessageHandler.MockGetByteArrayAsync(Encoding.UTF8.GetBytes(response));
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        var packets = await transport.GetAsync(CancellationToken.None);
+
+        Assert.Single(packets);
+        Assert.Equal(PacketType.Message, packets[0].Type);
+        Assert.Equal("Hi", Encoding.UTF8.GetString(packets[0].Body.Span));
+    }
+
+    [Fact]
+    async Task Should_Decode_Base64_Binary_Packet()
+    {
+        var body = Encoding.UTF8.GetBytes("Hi");
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        mockHttpMessageHandler.MockGetByteArrayAsync(Encoding.UTF8.GetBytes($"b{Convert.ToBase64String(body)}"));
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        var packets = await transport.GetAsync(CancellationToken.None);
+
+        Assert.Single(packets);
+        Assert.Equal(PacketFormat.Binary, packets[0].Format);
+        Assert.Equal(PacketType.Message, packets[0].Type);
+
+        // The body must be the decoded bytes, not the base64 text that carried them.
+        Assert.True(packets[0].Body.Span.SequenceEqual(body));
+    }
+
+    [Fact]
+    async Task Should_Skip_Unparseable_Packet()
+    {
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        mockHttpMessageHandler.MockGetByteArrayAsync(new byte[]
+        {
+            0x01, (byte)'x', 0x1e, (byte)'4', (byte)'H', (byte)'i'
+        });
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        var packets = await transport.GetAsync(CancellationToken.None);
+
+        Assert.Single(packets);
+        Assert.Equal("Hi", Encoding.UTF8.GetString(packets[0].Body.Span));
+    }
+
+    [Fact]
+    async Task Should_Reject_Handshake_That_Is_Not_An_Open_Packet()
+    {
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        mockHttpMessageHandler.MockGetByteArrayAsync(Encoding.UTF8.GetBytes("4Hello"));
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        var exception = await Assert.ThrowsAsync<TransportException>(
+            () => transport.ConnectAsync(CancellationToken.None));
+
+        Assert.Equal(ErrorReason.InvalidPacket, exception.ErrorReason);
+    }
+
+    [Fact]
+    async Task Should_Send_Sid_On_Every_Request_After_Handshake()
+    {
+        var sid = "1NkM2QzZGMjEyMTIxCg";
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        var requests = mockHttpMessageHandler.MockPollingServer(
+            Encoding.UTF8.GetBytes(Handshake(sid)),
+            Encoding.UTF8.GetBytes("4Hi"));
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        await transport.ConnectAsync(CancellationToken.None);
+        await transport.GetAsync(CancellationToken.None);
+        await transport.SendAsync(Packet.CreateMessagePacket("Hello"), CancellationToken.None);
+
+        Assert.Equal(3, requests.Count);
+        Assert.DoesNotContain("sid=", requests[0].Uri.Query);
+        Assert.Contains($"sid={sid}", requests[1].Uri.Query);
+        Assert.Contains($"sid={sid}", requests[2].Uri.Query);
+    }
+
+    [Fact]
+    async Task Should_Post_As_Text_Plain_Utf8()
+    {
+        var (transport, requests) = ConnectedTransport();
+        await transport.ConnectAsync(CancellationToken.None);
+
+        await transport.SendAsync(Packet.CreateMessagePacket("Hello"), CancellationToken.None);
+
+        var post = requests.Last();
+        Assert.Equal(HttpMethod.Post, post.Method);
+        Assert.Equal("text/plain; charset=utf-8", post.ContentType);
+        Assert.Equal("4Hello", Encoding.UTF8.GetString(post.Body));
+    }
+
+    [Fact]
+    async Task Should_Post_Binary_As_Base64_Behind_B_Prefix()
+    {
+        var body = new byte[] { 0x00, 0x01, 0xFE, 0xFF };
+        var (transport, requests) = ConnectedTransport();
+        await transport.ConnectAsync(CancellationToken.None);
+
+        await transport.SendAsync(Packet.CreateBinaryPacket(body), CancellationToken.None);
+
+        var post = requests.Last();
+
+        // Long-polling carries text only, so binary travels base64 behind a 'b'.
+        Assert.Equal("text/plain; charset=utf-8", post.ContentType);
+        Assert.Equal((byte)'b', post.Body[0]);
+        Assert.Equal(body, Convert.FromBase64String(Encoding.UTF8.GetString(post.Body.AsSpan(1))));
+    }
+
+    [Fact]
+    async Task Should_Reject_Packet_Larger_Than_MaxPayload()
+    {
+        var (transport, requests) = ConnectedTransport(maxPayload: 10);
+        await transport.ConnectAsync(CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<TransportException>(
+            () => transport.SendAsync(Packet.CreateMessagePacket(new string('x', 64)), CancellationToken.None));
+
+        Assert.Equal(ErrorReason.PayloadTooLarge, exception.ErrorReason);
+
+        // Rejected before it reached the wire: only the handshake was sent.
+        Assert.Single(requests);
+    }
+
+    [Fact]
+    async Task Should_Send_Close_Packet_On_Disconnect()
+    {
+        var (transport, requests) = ConnectedTransport();
+        await transport.ConnectAsync(CancellationToken.None);
+
+        await transport.Disconnect();
+
+        var post = requests.Last();
+        Assert.Equal(HttpMethod.Post, post.Method);
+        Assert.Equal("1", Encoding.UTF8.GetString(post.Body));
+    }
+
+    [Fact]
+    async Task Should_Send_Only_One_Close_Packet_When_Disconnected_Twice()
+    {
+        var (transport, requests) = ConnectedTransport();
+        await transport.ConnectAsync(CancellationToken.None);
+
+        await transport.Disconnect();
+        await transport.Disconnect();
+
+        Assert.Single(requests, request => request.Method == HttpMethod.Post);
+    }
+
+    [Fact]
+    void Connected_Should_Be_False_Before_Handshake()
+    {
+        var (transport, _) = ConnectedTransport();
+
+        Assert.False(transport.Connected);
+    }
+
+    [Fact]
+    async Task Connected_Should_Be_True_After_Handshake()
+    {
+        var (transport, _) = ConnectedTransport();
+
+        await transport.ConnectAsync(CancellationToken.None);
+
+        // Read twice: reporting the state must not also change it.
+        Assert.True(transport.Connected);
+        Assert.True(transport.Connected);
+    }
+
+    [Fact]
+    async Task Connected_Should_Be_False_After_Disconnect()
+    {
+        var (transport, _) = ConnectedTransport();
+        await transport.ConnectAsync(CancellationToken.None);
+
+        await transport.Disconnect();
+
+        Assert.False(transport.Connected);
+    }
+
+    private static (HttpPollingTransport Transport, List<CapturedRequest> Requests) ConnectedTransport(
+        int maxPayload = 1_000_000)
+    {
+        var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+        var requests = mockHttpMessageHandler.MockPollingServer(
+            Encoding.UTF8.GetBytes(Handshake("1NkM2QzZGMjEyMTIxCg", maxPayload)));
+        var transport = new HttpPollingTransport(
+            new HttpClient(mockHttpMessageHandler.Object) { BaseAddress = new Uri("http://foo.bar") }
+        );
+
+        return (transport, requests);
+    }
+
+    internal static string Handshake(string sid, int maxPayload = 1_000_000)
+    {
+        return $$"""0{"sid":"{{sid}}","maxPayload":{{maxPayload}},"pingTimeout":20000,"pingInterval":25000,"upgrades":["polling","websocket"]}""";
     }
 }

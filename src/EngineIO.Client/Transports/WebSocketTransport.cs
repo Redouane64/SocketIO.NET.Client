@@ -24,7 +24,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     /// </summary>
     private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(5);
 
-    private readonly ClientWebSocket _client;
+    private readonly IWebSocket _client;
 
     private readonly int _protocol = 4;
     private readonly SemaphoreSlim _receiveSemaphore = new(1, 1);
@@ -34,6 +34,11 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     private bool _connected;
 
     public WebSocketTransport(string baseAddress, string sid)
+        : this(new ClientWebSocketAdapter(), baseAddress, sid)
+    {
+    }
+
+    internal WebSocketTransport(IWebSocket client, string baseAddress, string sid)
     {
         if (string.IsNullOrEmpty(baseAddress))
         {
@@ -45,7 +50,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             throw new ArgumentException("Sid cannot be null or empty.", nameof(sid));
         }
 
-        _client = new ClientWebSocket();
+        _client = client;
 
         if (baseAddress.StartsWith(Uri.UriSchemeHttp))
         {
@@ -69,6 +74,11 @@ public sealed class WebSocketTransport : ITransport, IDisposable
     }
 
     public string Name => "websocket";
+
+    /// <summary>
+    ///     The endpoint this transport connects to, derived from the base address.
+    /// </summary>
+    internal Uri Uri => _uri;
 
     public bool Connected => _connected;
 

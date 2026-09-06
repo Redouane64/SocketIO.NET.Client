@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
@@ -23,6 +24,8 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     private static readonly TimeSpan PollingShutdownTimeout = TimeSpan.FromSeconds(5);
 
     private readonly ClientOptions _clientOptions = new();
+    private readonly HttpClient? _httpClient;
+    private readonly IWebSocket? _webSocket;
     private readonly ILogger<Engine>? _logger;
     private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
@@ -67,7 +70,25 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    ///     Drives the polling transport from a supplied <see cref="HttpClient" />, so the
+    ///     protocol behaviour can be exercised against a stubbed server.
+    /// </summary>
+    internal Engine(Action<ClientOptions> configure, HttpClient httpClient,
+        IWebSocket? webSocket = null, ILoggerFactory? loggerFactory = null)
+        : this(configure, loggerFactory)
+    {
+        _httpClient = httpClient;
+        _webSocket = webSocket;
+    }
+
     public bool Connected => _transport.Connected;
+
+    /// <summary>
+    ///     Name of the transport currently in use, so tests can tell whether the
+    ///     connection upgraded.
+    /// </summary>
+    internal string TransportName => _transport.Name;
 
     /// <summary>
     ///     Preferred over <see cref="Dispose" />: waits for the receive loop without
@@ -121,7 +142,9 @@ public sealed class Engine : IDisposable, IAsyncDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        _transport = _httpTransport = new HttpPollingTransport(_clientOptions.BaseAddress);
+        _transport = _httpTransport = _httpClient is null
+            ? new HttpPollingTransport(_clientOptions.BaseAddress)
+            : new HttpPollingTransport(_httpClient);
         try
         {
             await _httpTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
@@ -136,7 +159,9 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         {
             try
             {
-                _transport = _wsTransport = new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!);
+                _transport = _wsTransport = _webSocket is null
+                    ? new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!)
+                    : new WebSocketTransport(_webSocket, _clientOptions.BaseAddress, _httpTransport.Sid!);
                 await _wsTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception)
@@ -161,7 +186,10 @@ public sealed class Engine : IDisposable, IAsyncDisposable
             _receiveToken = _pollingCancellationTokenSource.Token;
         }
 
-        _pollingTask = Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
+        // No token here on purpose: Task.Run would cancel the task before the loop
+        // ever ran, and the finally that completes the packet channel would be
+        // skipped. PollAsync observes the token itself and exits on the first check.
+        _pollingTask = Task.Run(PollAsync);
     }
 
     private async Task PollAsync()
@@ -232,7 +260,11 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     private void HandleException(Exception exception)
     {
         _logger?.LogError(exception, exception.Message);
-        // TODO: clean up
+
+        // End the stream with the reason it ended. A listener can then tell a
+        // connection that died from one the server closed by agreement, which
+        // completes the channel without an error.
+        _packetsChannel.Writer.TryComplete(exception);
         _pollingCancellationTokenSource.Cancel();
     }
 
@@ -265,9 +297,11 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     public async IAsyncEnumerable<Packet> ListenAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var reader = _packetsChannel.Reader;
-        var listenerCancellationToken = CancellationTokenSource.CreateLinkedTokenSource(this._pollingCancellationTokenSource.Token,
-            cancellationToken);
-        while (await reader.WaitToReadAsync(listenerCancellationToken.Token).ConfigureAwait(false))
+
+        // Only the caller's token cancels the enumeration. The engine signals the end
+        // of the stream by completing the channel, so linking the polling token here
+        // would race that completion and surface a cancellation instead of the reason.
+        while (await reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
         {
             while (reader.TryRead(out var packet))
             {

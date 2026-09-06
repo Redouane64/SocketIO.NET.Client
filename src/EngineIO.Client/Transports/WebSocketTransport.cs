@@ -1,7 +1,6 @@
 using System;
 using System.Buffers;
-using System.Collections.ObjectModel;
-using System.IO;
+using System.Collections.Generic;
 using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,6 +12,18 @@ namespace EngineIO.Client.Transports;
 
 public sealed class WebSocketTransport : ITransport, IDisposable
 {
+    /// <summary>
+    ///     Size of a single read from the socket. Messages larger than this are
+    ///     read across several iterations and reassembled.
+    /// </summary>
+    private const int ReceiveChunkSize = 4096;
+
+    /// <summary>
+    ///     How long to wait for the server to answer the close handshake before
+    ///     dropping the socket.
+    /// </summary>
+    private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(5);
+
     private readonly ClientWebSocket _client;
 
     private readonly int _protocol = 4;
@@ -68,83 +79,131 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             return;
         }
 
-        await _client.ConnectAsync(_uri, cancellationToken);
+        await _client.ConnectAsync(_uri, cancellationToken).ConfigureAwait(false);
 
         // ping probe
-        await SendAsync(Packet.PingProbePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
+        await SendAsync(Packet.PingProbePacket, cancellationToken).ConfigureAwait(false);
 
-        // pong probe
-        var data = await GetAsync(cancellationToken);
-        if (!Packet.TryParse(data[0], out var packet))
-        {
-            throw new TransportException(ErrorReason.InvalidPacket);
-        }
-
-        if (packet.Type != PacketType.Pong)
+        // pong probe: the reply must echo the "probe" payload we just sent, otherwise
+        // it is an unrelated pong and the upgrade has not been acknowledged.
+        var packets = await GetAsync(cancellationToken).ConfigureAwait(false);
+        if (packets.Count == 0
+            || packets[0].Type != PacketType.Pong
+            || !packets[0].Body.Span.SequenceEqual(Packet.PingProbePacket.Body.Span))
         {
             throw new TransportException(ErrorReason.InvalidPacket);
         }
 
         // upgrade
-        await SendAsync(Packet.UpgradePacket.ToPlaintextPacket(), PacketFormat.PlainText, cancellationToken);
+        await SendAsync(Packet.UpgradePacket, cancellationToken).ConfigureAwait(false);
 
         _connected = true;
     }
 
-    public Task Disconnect()
+    public async Task Disconnect()
     {
-        if (_connected)
+        if (!_connected)
         {
-            _client.Abort();
+            return;
         }
 
         _connected = false;
-        return Task.CompletedTask;
-    }
-
-    public async Task<ReadOnlyCollection<ReadOnlyMemory<byte>>> GetAsync(CancellationToken cancellationToken = default)
-    {
-        var packets = new Collection<ReadOnlyMemory<byte>>();
-        using var rent = MemoryPool<byte>.Shared.Rent(1);
-        Memory<byte> buffer = rent.Memory;
 
         try
         {
-            await _receiveSemaphore.WaitAsync(CancellationToken.None);
+            // Tell the server we are going away, then run the WebSocket close
+            // handshake instead of aborting the socket underneath it.
+            await SendAsync(Packet.ClosePacket).ConfigureAwait(false);
+
+            if (_client.State == WebSocketState.Open)
+            {
+                using var timeout = new CancellationTokenSource(CloseTimeout);
+                await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, timeout.Token).ConfigureAwait(false);
+            }
+        }
+        catch (Exception exception) when (
+            exception is WebSocketException or TransportException or OperationCanceledException)
+        {
+            // The peer is already gone or will not answer the close handshake.
+            _client.Abort();
+        }
+    }
+
+    public async Task<IReadOnlyList<Packet>> GetAsync(CancellationToken cancellationToken = default)
+    {
+        await _receiveSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            using var rent = MemoryPool<byte>.Shared.Rent(ReceiveChunkSize);
+            Memory<byte> buffer = rent.Memory;
+
+            // Only allocated if the message turns out to span more than one read.
+            ArrayBufferWriter<byte>? message = null;
+            byte[]? payload = null;
             ValueWebSocketReceiveResult result;
+
             do
             {
-                result = await _client.ReceiveAsync(buffer, cancellationToken);
+                result = await _client.ReceiveAsync(buffer, cancellationToken).ConfigureAwait(false);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
-                    packets.Add(new[] { (byte)PacketType.Close });
+                    await _client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None).ConfigureAwait(false);
+                    _connected = false;
+                    return new[] { Packet.ClosePacket };
+                }
+
+                if (result.EndOfMessage && message is null)
+                {
+                    // Common case: the whole packet arrived in one read, so there is
+                    // nothing to reassemble.
+                    payload = buffer.Span[..result.Count].ToArray();
                     break;
                 }
+
+                message ??= new ArrayBufferWriter<byte>(ReceiveChunkSize * 2);
+                message.Write(buffer.Span[..result.Count]);
             } while (!result.EndOfMessage);
 
-            packets.Add(buffer[..result.Count]);
+            // Each frame carries exactly one packet. Copy out: the writer's buffer is
+            // not owned by the caller, and the rented buffer returns to the pool here.
+            payload ??= message!.WrittenSpan.ToArray();
+
+            // A binary frame is the message payload itself, sent as-is. There is no
+            // packet type byte to parse off the front.
+            if (result.MessageType == WebSocketMessageType.Binary)
+            {
+                return new[] { Packet.CreateBinaryPacket(payload) };
+            }
+
+            return Packet.TryParse(payload, out var packet)
+                ? new[] { packet }
+                : Array.Empty<Packet>();
         }
         finally
         {
             _receiveSemaphore.Release();
         }
-
-        return new ReadOnlyCollection<ReadOnlyMemory<byte>>(packets);
     }
 
-    public async Task SendAsync(ReadOnlyMemory<byte> packets, PacketFormat format,
-        CancellationToken cancellationToken = default)
+    public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)
     {
         if (_client.State is WebSocketState.Closed or WebSocketState.Aborted)
         {
             throw new TransportException(ErrorReason.ConnectionClosed);
         }
 
+        // Binary is sent as-is in a binary frame. The base64 + 'b' prefix encoding
+        // belongs to long-polling, which can only carry text.
+        var binary = packet.Format == PacketFormat.Binary;
+        var payload = binary ? packet.Body : packet.ToPlaintextPacket();
+        var messageType = binary ? WebSocketMessageType.Binary : WebSocketMessageType.Text;
+
+        await _sendSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+
         try
         {
-            await _sendSemaphore.WaitAsync(CancellationToken.None);
-            await _client.SendAsync(packets, WebSocketMessageType.Text, true, cancellationToken);
+            await _client.SendAsync(payload, messageType, true, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

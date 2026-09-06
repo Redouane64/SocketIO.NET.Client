@@ -22,11 +22,7 @@ public static class PacketExtensions
 
         var payload = new byte[1 + packet.Body.Length];
         payload[0] = (byte)packet.Type;
-        for (var i = 1; i <= packet.Body.Length; i++)
-        {
-            payload[i] = packet.Body.Span[i - 1];
-        }
-
+        packet.Body.Span.CopyTo(payload.AsSpan(1));
         return payload;
     }
 
@@ -47,11 +43,7 @@ public static class PacketExtensions
         var encodedBody = encoder.Encode(packet.Body, Encoding.UTF8);
         var payload = new byte[1 + encodedBody.Length];
         payload[0] = (byte)'b';
-        for (var i = 1; i <= encodedBody.Length; i++)
-        {
-            payload[i] = encodedBody.Span[i - 1];
-        }
-
+        encodedBody.Span.CopyTo(payload.AsSpan(1));
         return payload;
     }
 }

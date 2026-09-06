@@ -138,8 +138,12 @@ public sealed class WebSocketTransport : ITransport, IDisposable
         {
             using var rent = MemoryPool<byte>.Shared.Rent(ReceiveChunkSize);
             Memory<byte> buffer = rent.Memory;
-            var message = new ArrayBufferWriter<byte>(ReceiveChunkSize);
+
+            // Only allocated if the message turns out to span more than one read.
+            ArrayBufferWriter<byte>? message = null;
+            byte[]? payload = null;
             ValueWebSocketReceiveResult result;
+
             do
             {
                 result = await _client.ReceiveAsync(buffer, cancellationToken);
@@ -151,12 +155,21 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                     return new ReadOnlyCollection<Packet>(packets);
                 }
 
+                if (result.EndOfMessage && message is null)
+                {
+                    // Common case: the whole packet arrived in one read, so there is
+                    // nothing to reassemble.
+                    payload = buffer.Span[..result.Count].ToArray();
+                    break;
+                }
+
+                message ??= new ArrayBufferWriter<byte>(ReceiveChunkSize * 2);
                 message.Write(buffer.Span[..result.Count]);
             } while (!result.EndOfMessage);
 
             // Each frame carries exactly one packet. Copy out: the writer's buffer is
             // not owned by the caller, and the rented buffer returns to the pool here.
-            var payload = message.WrittenSpan.ToArray();
+            payload ??= message!.WrittenSpan.ToArray();
 
             if (result.MessageType == WebSocketMessageType.Binary)
             {

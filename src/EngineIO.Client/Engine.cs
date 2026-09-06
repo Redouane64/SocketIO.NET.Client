@@ -33,10 +33,17 @@ public sealed class Engine : IDisposable
     private int _heartbeatTimeoutMs;
 
     /// <summary>
-    ///     <see cref="Environment.TickCount64" /> at which the connection is
-    ///     considered dead if no ping has arrived.
+    ///     Cancels the receive when the heartbeat budget runs out. Created once per
+    ///     connection and pushed forward by <see cref="ResetHeartbeat" />, so the
+    ///     receive loop allocates no cancellation state per iteration.
     /// </summary>
-    private long _heartbeatDeadline;
+    private CancellationTokenSource? _heartbeatCts;
+
+    /// <summary>
+    ///     The token every receive runs under: the heartbeat source when there is a
+    ///     budget to enforce, otherwise the polling source itself.
+    /// </summary>
+    private CancellationToken _receiveToken;
 
     /// <summary>
     ///     The receive loop, kept so that shutdown can wait for it to unwind before
@@ -77,6 +84,7 @@ public sealed class Engine : IDisposable
         }
 
         _pollingCancellationTokenSource.Dispose();
+        _heartbeatCts?.Dispose();
         _httpTransport?.Dispose();
         _wsTransport?.Dispose();
     }
@@ -111,7 +119,17 @@ public sealed class Engine : IDisposable
         // The server pings every pingInterval and allows pingTimeout for the reply,
         // so silence for longer than their sum means the connection is gone.
         _heartbeatTimeoutMs = _httpTransport.PingInterval + _httpTransport.PingTimeout;
-        ResetHeartbeat();
+
+        if (_heartbeatTimeoutMs > 0)
+        {
+            _heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(_pollingCancellationTokenSource.Token);
+            _receiveToken = _heartbeatCts.Token;
+            ResetHeartbeat();
+        }
+        else
+        {
+            _receiveToken = _pollingCancellationTokenSource.Token;
+        }
 
         _pollingTask = Task.Run(PollAsync, _pollingCancellationTokenSource.Token);
     }
@@ -124,16 +142,7 @@ public sealed class Engine : IDisposable
         {
             while (!_pollingCancellationTokenSource.IsCancellationRequested)
             {
-                using var deadline =
-                    CancellationTokenSource.CreateLinkedTokenSource(_pollingCancellationTokenSource.Token);
-
-                if (_heartbeatTimeoutMs > 0)
-                {
-                    var remaining = _heartbeatDeadline - Environment.TickCount64;
-                    deadline.CancelAfter(remaining > 0 ? TimeSpan.FromMilliseconds(remaining) : TimeSpan.Zero);
-                }
-
-                var packets = await _transport.GetAsync(deadline.Token);
+                var packets = await _transport.GetAsync(_receiveToken);
 
                 foreach (var packet in packets)
                 {
@@ -186,7 +195,8 @@ public sealed class Engine : IDisposable
 
     private void ResetHeartbeat()
     {
-        _heartbeatDeadline = Environment.TickCount64 + _heartbeatTimeoutMs;
+        // Reschedules the existing timer rather than building new cancellation state.
+        _heartbeatCts?.CancelAfter(_heartbeatTimeoutMs);
     }
 
     private void HandleException(Exception exception)

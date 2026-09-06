@@ -121,9 +121,11 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
         try
         {
             using var content = new ReadOnlyMemoryContent(packets);
-            content.Headers.ContentType = format == PacketFormat.Binary
-                ? new MediaTypeHeaderValue("application/octet-stream")
-                : new MediaTypeHeaderValue("text/plain") { CharSet = Encoding.UTF8.WebName };
+
+            // A polling payload is always text: binary packets travel base64-encoded
+            // behind a 'b' prefix, so there is nothing to label octet-stream.
+            content.Headers.ContentType =
+                new MediaTypeHeaderValue("text/plain") { CharSet = Encoding.UTF8.WebName };
 
             using var response = await _httpClient.PostAsync(Path, content, cancellationToken);
             response.EnsureSuccessStatusCode();

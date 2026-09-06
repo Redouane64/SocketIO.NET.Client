@@ -123,7 +123,9 @@ public sealed class WebSocketTransport : ITransport, IDisposable
                 }
             } while (!result.EndOfMessage);
 
-            packets.Add(buffer[..result.Count]);
+            // Copy out: the rented buffer goes back to the pool when this method
+            // returns, and the caller reads the packets after that.
+            packets.Add(buffer.Span[..result.Count].ToArray());
         }
         finally
         {

@@ -312,6 +312,21 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
+    ///     Send a packet as it stands, leaving its framing to the current transport.
+    /// </summary>
+    /// <remarks>
+    ///     A protocol layered on top of Engine.io does its own encoding and has to say
+    ///     which Engine.io packet carries the result — a decision the text and binary
+    ///     overloads make on the caller's behalf.
+    /// </remarks>
+    /// <param name="packet">Packet to send</param>
+    /// <param name="cancellationToken"></param>
+    public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)
+    {
+        await _transport.SendAsync(packet, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     ///     Send plain text message.
     /// </summary>
     /// <param name="text">Plain text message</param>

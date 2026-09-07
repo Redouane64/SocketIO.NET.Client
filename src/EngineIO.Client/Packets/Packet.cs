@@ -57,6 +57,19 @@ public readonly struct Packet
         return new Packet(PacketFormat.PlainText, PacketType.Message, body);
     }
 
+    /// <summary>
+    ///     Wrap an already UTF-8 encoded body in a plain-text message packet.
+    /// </summary>
+    /// <remarks>
+    ///     A protocol layered on top of Engine.io — Socket.IO — encodes straight to
+    ///     bytes, so routing it through <see cref="CreateMessagePacket(string)" />
+    ///     would transcode the same payload twice for nothing.
+    /// </remarks>
+    public static Packet CreateMessagePacket(ReadOnlyMemory<byte> body)
+    {
+        return new Packet(PacketFormat.PlainText, PacketType.Message, body);
+    }
+
     public static Packet CreateBinaryPacket(ReadOnlyMemory<byte> body)
     {
         return new Packet(PacketFormat.Binary, PacketType.Message, body);

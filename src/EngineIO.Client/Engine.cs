@@ -143,8 +143,8 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         _transport = _httpTransport = _httpClient is null
-            ? new HttpPollingTransport(_clientOptions.BaseAddress)
-            : new HttpPollingTransport(_httpClient);
+            ? new HttpPollingTransport(_clientOptions.BaseAddress, _clientOptions.Path)
+            : new HttpPollingTransport(_httpClient, _clientOptions.Path);
         try
         {
             await _httpTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
@@ -160,8 +160,9 @@ public sealed class Engine : IDisposable, IAsyncDisposable
             try
             {
                 _transport = _wsTransport = _webSocket is null
-                    ? new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!)
-                    : new WebSocketTransport(_webSocket, _clientOptions.BaseAddress, _httpTransport.Sid!);
+                    ? new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!, _clientOptions.Path)
+                    : new WebSocketTransport(_webSocket, _clientOptions.BaseAddress, _httpTransport.Sid!,
+                        _clientOptions.Path);
                 await _wsTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception)

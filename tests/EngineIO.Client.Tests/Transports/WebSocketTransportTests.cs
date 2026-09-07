@@ -19,8 +19,20 @@ public sealed class WebSocketTransportTests
         using var transport = new WebSocketTransport(baseAddress, sid);
 
         Assert.Equal(expectedScheme, transport.Uri.Scheme);
-        Assert.Equal("/engine.io", transport.Uri.AbsolutePath);
+        Assert.Equal("/engine.io/", transport.Uri.AbsolutePath);
         Assert.Equal($"?EIO=4&transport=websocket&sid={sid}", transport.Uri.Query);
+    }
+
+    [Theory(DisplayName = "The endpoint is served from the configured path")]
+    [InlineData("/socket.io", "/socket.io/")]
+    [InlineData("socket.io", "/socket.io/")]
+    [InlineData("/socket.io/", "/socket.io/")]
+    [InlineData("", "/")]
+    void Should_Serve_From_The_Configured_Path(string path, string expectedPath)
+    {
+        using var transport = new WebSocketTransport("http://example.com", "1NkM2QzZGMjEyMTIxCg", path);
+
+        Assert.Equal(expectedPath, transport.Uri.AbsolutePath);
     }
 
     [Theory(DisplayName = "Required constructor arguments are rejected when missing")]

@@ -33,12 +33,13 @@ public sealed class WebSocketTransport : ITransport, IDisposable
 
     private bool _connected;
 
-    public WebSocketTransport(string baseAddress, string sid)
-        : this(new ClientWebSocketAdapter(), baseAddress, sid)
+    public WebSocketTransport(string baseAddress, string sid, string path = TransportPath.Default)
+        : this(new ClientWebSocketAdapter(), baseAddress, sid, path)
     {
     }
 
-    internal WebSocketTransport(IWebSocket client, string baseAddress, string sid)
+    internal WebSocketTransport(IWebSocket client, string baseAddress, string sid,
+        string path = TransportPath.Default)
     {
         if (string.IsNullOrEmpty(baseAddress))
         {
@@ -62,7 +63,7 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             baseAddress = baseAddress.Replace("https://", "wss://");
         }
 
-        var uri = $"{baseAddress}/engine.io?EIO={_protocol}&transport={Name}&sid={sid}";
+        var uri = $"{baseAddress}{TransportPath.Normalize(path)}?EIO={_protocol}&transport={Name}&sid={sid}";
         _uri = new Uri(uri);
     }
 

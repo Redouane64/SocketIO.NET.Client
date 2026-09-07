@@ -9,8 +9,8 @@ Task-based async (`Task`, `IAsyncEnumerable`, `Channel<T>`) rather than the even
 .NET Socket.IO clients. Prefer an `await`-able or `await foreach`-able API over an `event` when adding surface area.
 
 The Engine.IO layer is implemented (HTTP polling transport, WebSocket transport with upgrade, plain-text and binary
-packets). The Socket.IO layer on top of it — namespaces, payload send/receive — is not yet written; see the TODOs in
-`README.md`.
+packets). The Socket.IO layer on top of it is half written: `src/SocketIO.Client` encodes packets and sends them, but
+nothing parses an inbound one yet, so namespaces and acknowledgements are still open. See the TODOs in `README.md`.
 
 Protocol references:
 - Engine.IO: https://socket.io/docs/v4/engine-io-protocol
@@ -33,6 +33,7 @@ Running the sample end to end needs the Node test server, which lives in an npm 
 ```bash
 npm install                        # once, from the repo root
 npm run start:server               # Engine.IO server on http://127.0.0.1:9854 (scripts/run-server.sh wraps this)
+npm run start:socket-server        # Socket.IO server on http://127.0.0.1:9855
 dotnet run --project samples/PingPong
 ```
 

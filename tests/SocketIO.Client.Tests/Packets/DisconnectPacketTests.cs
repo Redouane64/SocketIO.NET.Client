@@ -9,7 +9,7 @@ public class DisconnectPacketTests
     [Fact]
     void Should_Create_Disconnect_Packet()
     {
-        var packet = Packet.DisconnectPacket;
+        var packet = PacketBuilder.Disconnect;
 
         Assert.Equal(PacketType.Disconnect, packet.Type);
         Assert.Equal("/", packet.Namespace);
@@ -20,7 +20,7 @@ public class DisconnectPacketTests
     {
         var @namespace = "test";
 
-        var packet = new Packet(PacketType.Disconnect, @namespace);
+        var packet = new PacketBuilder(PacketType.Disconnect, @namespace);
 
         Assert.Equal(PacketType.Disconnect, packet.Type);
         Assert.Equal($"/{@namespace}", packet.Namespace);
@@ -29,7 +29,7 @@ public class DisconnectPacketTests
     [Fact]
     void Should_Serialize_Disconnect_Packet()
     {
-        var packet = Packet.DisconnectPacket;
+        var packet = PacketBuilder.Disconnect;
 
         var encodedPacket = Encoding.UTF8.GetString(packet.Serialize().Span);
 
@@ -41,7 +41,7 @@ public class DisconnectPacketTests
     void Should_Serialize_Disconnect_Packet_With_Namespace()
     {
         var @namespace = "test";
-        var packet = new Packet(PacketType.Disconnect, @namespace);
+        var packet = new PacketBuilder(PacketType.Disconnect, @namespace);
 
         var encodedPacket = Encoding.UTF8.GetString(packet.Serialize().Span);
 
@@ -52,7 +52,7 @@ public class DisconnectPacketTests
     [Fact]
     void Should_Reject_A_Payload_On_A_Disconnect_Packet()
     {
-        var packet = Packet.DisconnectPacket;
+        var packet = PacketBuilder.Disconnect;
 
         Assert.Throws<InvalidOperationException>(() => packet.AddItem("World"));
     }

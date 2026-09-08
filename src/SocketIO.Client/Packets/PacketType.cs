@@ -45,3 +45,37 @@ public enum PacketType : byte
     /// </summary>
     BinaryAck = 0x36
 }
+
+/// <summary>
+///     What each packet type is allowed to carry.
+/// </summary>
+/// <remarks>
+///     The rules belong to the type rather than to either packet class, so that the
+///     builder and the parser cannot drift apart on what a header may hold.
+/// </remarks>
+internal static class PacketTypeExtensions
+{
+    /// <summary>
+    ///     Whether the first payload argument is an event name.
+    /// </summary>
+    public static bool CarriesEventName(this PacketType type)
+    {
+        return type is PacketType.Event or PacketType.BinaryEvent;
+    }
+
+    /// <summary>
+    ///     Whether the header may hold an acknowledgement id.
+    /// </summary>
+    public static bool CarriesAckId(this PacketType type)
+    {
+        return type is PacketType.Event or PacketType.Ack or PacketType.BinaryEvent or PacketType.BinaryAck;
+    }
+
+    /// <summary>
+    ///     Whether the packet announces attachments and is followed by them.
+    /// </summary>
+    public static bool CarriesAttachments(this PacketType type)
+    {
+        return type is PacketType.BinaryEvent or PacketType.BinaryAck;
+    }
+}

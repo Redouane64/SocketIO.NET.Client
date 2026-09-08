@@ -105,7 +105,7 @@ public sealed class IO : IAsyncDisposable
     {
         // Built before the connection is touched, so a namespace the protocol refuses
         // does not leave a connection open behind it.
-        var packet = new Packet(PacketType.Connect, @namespace);
+        var packet = new PacketBuilder(PacketType.Connect, @namespace);
 
         await _connectLock.WaitAsync(cancellationToken).ConfigureAwait(false);
 
@@ -142,7 +142,7 @@ public sealed class IO : IAsyncDisposable
     /// <param name="cancellationToken"></param>
     public async Task DisconnectAsync(string? @namespace = default, CancellationToken cancellationToken = default)
     {
-        var packet = new Packet(PacketType.Disconnect, @namespace);
+        var packet = new PacketBuilder(PacketType.Disconnect, @namespace);
         await SendPacketAsync(packet, cancellationToken).ConfigureAwait(false);
         _namespaces.Remove(packet.Namespace);
     }
@@ -173,7 +173,7 @@ public sealed class IO : IAsyncDisposable
     public Task SendAsync(string text, string? @event = default, string? @namespace = default,
         CancellationToken cancellationToken = default)
     {
-        var packet = new Packet(PacketType.Event, @namespace, @event);
+        var packet = new PacketBuilder(PacketType.Event, @namespace, @event);
         packet.AddItem(text);
         return SendPacketAsync(packet, cancellationToken);
     }
@@ -189,7 +189,7 @@ public sealed class IO : IAsyncDisposable
     public Task SendAsync<T>(T data, string? @event = default, string? @namespace = default,
         CancellationToken cancellationToken = default) where T : class
     {
-        var packet = new Packet(PacketType.Event, @namespace, @event);
+        var packet = new PacketBuilder(PacketType.Event, @namespace, @event);
         packet.AddItem(data);
         return SendPacketAsync(packet, cancellationToken);
     }
@@ -221,12 +221,12 @@ public sealed class IO : IAsyncDisposable
     public Task SendAsync(ReadOnlyMemory<byte> data, string? @event = default, string? @namespace = default,
         CancellationToken cancellationToken = default)
     {
-        var packet = new Packet(PacketType.BinaryEvent, @namespace, @event);
+        var packet = new PacketBuilder(PacketType.BinaryEvent, @namespace, @event);
         packet.AddItem(data);
         return SendPacketAsync(packet, cancellationToken);
     }
 
-    private async Task SendPacketAsync(Packet packet, CancellationToken cancellationToken)
+    private async Task SendPacketAsync(PacketBuilder packet, CancellationToken cancellationToken)
     {
         if (!_client.Connected)
         {

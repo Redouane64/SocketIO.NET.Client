@@ -1,380 +1,132 @@
 using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Text;
-using System.Text.Json;
 
 namespace SocketIO.Client.Packets;
 
 /// <summary>
-///     Represent a Socket.IO packet. see: https://socket.io/docs/v4/socket-io-protocol
+///     A Socket.IO packet that arrived from the server.
+///     see: https://socket.io/docs/v4/socket-io-protocol
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The wire format is a header followed by a JSON payload:
-///         <c>&lt;type&gt;[&lt;# of binary attachments&gt;-][&lt;namespace&gt;,][&lt;ack id&gt;]&lt;JSON payload&gt;</c>.
+///         The counterpart of <see cref="PacketBuilder" />, which accumulates the
+///         arguments of a packet to send. Two types rather than one because the two
+///         sets of operations are never both valid, and because a merged type would
+///         carry half its fields dead on every instance.
 ///     </para>
 ///     <para>
-///         Binary arguments never appear in that JSON. Each leaves a placeholder behind
-///         and travels as its own packet after the header — see <see cref="Attachments" />.
+///         The payload is kept as the bytes it arrived in and read only when an
+///         argument is asked for, so a packet nobody inspects costs no more than its
+///         header. Holding the memory is safe: both transports copy a message out of
+///         their receive buffer before handing it up, so nothing else owns it.
+///     </para>
+///     <para>
+///         Indices address the data arguments alone. An event names itself in the
+///         first element of the payload array, and that element is surfaced as
+///         <see cref="Event" /> rather than as argument zero.
 ///     </para>
 /// </remarks>
 public sealed class Packet
 {
     /// <summary>
-    ///     The namespace every connection starts in.
+    ///     The namespace every connection starts in, and the one a packet belongs to
+    ///     when its header names none.
     /// </summary>
     public const string DefaultNamespace = "/";
 
     /// <summary>
-    ///     The event name used when the caller does not name one.
-    /// </summary>
-    public const string DefaultEventName = "message";
-
-    public static readonly Packet ConnectPacket = new(PacketType.Connect);
-
-    public static readonly Packet DisconnectPacket = new(PacketType.Disconnect);
-
-    private readonly List<IPacketData> _data = new();
-
-    private readonly List<ReadOnlyMemory<byte>> _attachments = new();
-
-    public Packet(PacketType type)
-        : this(type, null, null, null)
-    {
-    }
-
-    public Packet(PacketType type, string? @namespace)
-        : this(type, @namespace, null, null)
-    {
-    }
-
-    public Packet(PacketType type, string? @namespace, string? @event)
-        : this(type, @namespace, @event, null)
-    {
-    }
-
-    public Packet(PacketType type, int ackId, string? @namespace, string? @event)
-        : this(type, @namespace, @event, ackId)
-    {
-    }
-
-    /// <summary>
-    ///     The one constructor that validates, so that no combination reaches the
-    ///     wire without having been checked.
-    /// </summary>
-    private Packet(PacketType type, string? @namespace, string? @event, int? ackId)
-    {
-        if (!Enum.IsDefined(type))
-        {
-            throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown packet type.");
-        }
-
-        if (@event is not null && !CarriesEventName(type))
-        {
-            throw new ArgumentException($"A {type} packet does not carry an event name.", nameof(@event));
-        }
-
-        if (ackId.HasValue && !CarriesAckId(type))
-        {
-            throw new ArgumentException($"A {type} packet cannot carry an acknowledgement id.", nameof(type));
-        }
-
-        if (ackId is < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(ackId), ackId,
-                "An acknowledgement id is a non-negative number; a sign would be read as the start of the payload.");
-        }
-
-        // An acknowledgement that names no id answers nothing: the server looks the id
-        // up among the callbacks it is waiting on and discards the packet when it is
-        // missing, so it is refused here rather than sent into the void.
-        if (!ackId.HasValue && type is PacketType.Ack or PacketType.BinaryAck)
-        {
-            throw new ArgumentException($"A {type} packet has to name the acknowledgement it answers.",
-                nameof(ackId));
-        }
-
-        Type = type;
-        Namespace = NormalizeNamespace(@namespace);
-        AckId = ackId;
-
-        if (!CarriesEventName(type))
-        {
-            return;
-        }
-
-        // The event name is not header material: it is the first argument of the
-        // payload array, which is why it is seeded as an item like any other.
-        Event = @event ?? DefaultEventName;
-
-        if (IsReservedEventName(Event))
-        {
-            throw new ArgumentException(
-                $"\"{Event}\" is reserved by the protocol; a packet naming it is rejected by the server.",
-                nameof(@event));
-        }
-
-        _data.Add(new TextPacketData(Event));
-    }
-
-    /// <summary>
     ///     Represents packet type.
     /// </summary>
-    public PacketType Type { get; }
+    public PacketType Type => throw new NotImplementedException();
 
     /// <summary>
     ///     Namespace this packet belongs to, always in its leading-slash form.
     /// </summary>
-    public string Namespace { get; }
+    public string Namespace => throw new NotImplementedException();
 
     /// <summary>
-    ///     Acknowledgement id correlating an event with its acknowledgement, when the
-    ///     packet takes part in one.
+    ///     Acknowledgement id this packet carries, when it takes part in one.
     /// </summary>
-    public int? AckId { get; }
+    /// <remarks>
+    ///     On an event it is the id the server expects an acknowledgement under; on an
+    ///     acknowledgement it is the id of the event being answered.
+    /// </remarks>
+    public int? AckId => throw new NotImplementedException();
 
     /// <summary>
     ///     Event name for the types that carry one, otherwise <c>null</c>.
     /// </summary>
-    /// <remarks>
-    ///     An acknowledgement answers an event rather than naming one, so its payload
-    ///     holds the response arguments alone.
-    /// </remarks>
-    public string? Event { get; }
+    public string? Event => throw new NotImplementedException();
 
     /// <summary>
-    ///     The binary arguments, in the order their placeholders reference them. Each
-    ///     is sent as a separate binary packet after this one.
+    ///     Number of data arguments, not counting the event name.
     /// </summary>
-    public IReadOnlyList<ReadOnlyMemory<byte>> Attachments => _attachments;
+    public int Count => throw new NotImplementedException();
 
     /// <summary>
-    ///     Add plain text data to packet.
-    /// </summary>
-    /// <param name="data">Plain text data</param>
-    public void AddItem(string data)
-    {
-        AddPacketData(new TextPacketData(data));
-    }
-
-    /// <summary>
-    ///     Add Json serializable POCO.
-    /// </summary>
-    /// <param name="data">Data instance</param>
-    /// <typeparam name="T">Data type</typeparam>
-    public void AddItem<T>(T data) where T : class
-    {
-        AddPacketData(new JsonPacketData<T>(data));
-    }
-
-    /// <summary>
-    ///     Add binary data.
+    ///     Parse the text part of a packet: everything up to and including the JSON
+    ///     payload, but not the binary attachments it may announce.
     /// </summary>
     /// <remarks>
-    ///     Present so that a byte array reaches the binary overload rather than
-    ///     <see cref="AddItem{T}" />, which would quietly encode it as a base64 string.
+    ///     Deliberately unaware of attachments, so that parsing stays a pure function
+    ///     of one buffer. Reassembling a packet that spans several Engine.io messages
+    ///     is the <see cref="Decoder" />'s job, and keeping it there is what stops a
+    ///     parse call from depending on the order it was made in.
     /// </remarks>
-    /// <param name="data">Binary data</param>
-    public void AddItem(byte[] data)
+    /// <param name="data">The packet as it came off the wire</param>
+    /// <param name="packet">Parsed packet instance</param>
+    /// <returns>Boolean indicating success or failure of parse operation</returns>
+    public static bool TryParse(ReadOnlyMemory<byte> data, out Packet? packet)
     {
-        AddItem(new ReadOnlyMemory<byte>(data));
+        throw new NotImplementedException();
     }
 
     /// <summary>
-    ///     Add binary data.
+    ///     Whether the argument at <paramref name="index" /> arrived as a binary
+    ///     attachment rather than as a Json value.
     /// </summary>
-    /// <param name="data">Binary data</param>
-    public void AddItem(ReadOnlyMemory<byte> data)
+    public bool IsBinary(int index)
     {
-        if (Type is not (PacketType.BinaryEvent or PacketType.BinaryAck))
-        {
-            throw new InvalidOperationException(
-                $"A {Type} packet cannot carry binary data; use {nameof(PacketType.BinaryEvent)} " +
-                $"or {nameof(PacketType.BinaryAck)}.");
-        }
-
-        AddPacketData(new BinaryPacketData(_attachments.Count, data));
-        _attachments.Add(data);
+        throw new NotImplementedException();
     }
 
     /// <summary>
-    ///     Append an argument to the payload.
+    ///     Deserialize the argument at <paramref name="index" />.
+    /// </summary>
+    /// <typeparam name="T">Type to deserialize the argument as</typeparam>
+    public T? GetItem<T>(int index)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
+    ///     The bytes of the argument at <paramref name="index" />, which has to be one
+    ///     <see cref="IsBinary" /> reports as binary.
+    /// </summary>
+    public ReadOnlyMemory<byte> GetAttachment(int index)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
+    ///     How many attachments the header announced.
+    /// </summary>
+    internal int AttachmentCount => throw new NotImplementedException();
+
+    /// <summary>
+    ///     Whether every attachment the header announced has arrived.
     /// </summary>
     /// <remarks>
-    ///     Named apart from the public <c>AddItem</c> overloads on purpose: an
-    ///     <see cref="IPacketData" /> is a class, so an overload by that name would
-    ///     bind to <see cref="AddItem{T}" /> and recurse into itself.
+    ///     True from the outset for a packet that announced none, which is every
+    ///     packet that is not a binary one.
     /// </remarks>
-    private void AddPacketData(IPacketData data)
-    {
-        if (Type is PacketType.Connect or PacketType.Disconnect)
-        {
-            throw new InvalidOperationException($"A {Type} packet does not carry a payload.");
-        }
-
-        _data.Add(data);
-    }
+    internal bool IsComplete => throw new NotImplementedException();
 
     /// <summary>
-    ///     Serialize the packet header and payload to their wire representation.
+    ///     Take delivery of the next attachment, in the order the placeholders in the
+    ///     payload refer to them.
     /// </summary>
-    /// <remarks>
-    ///     The result is the text part only. Anything in <see cref="Attachments" />
-    ///     follows it as separate packets.
-    /// </remarks>
-    /// <returns>The encoded packet</returns>
-    internal ReadOnlyMemory<byte> Serialize()
+    internal void Attach(ReadOnlyMemory<byte> attachment)
     {
-        var buffer = new ArrayBufferWriter<byte>();
-        Serialize(buffer);
-        return buffer.WrittenMemory;
-    }
-
-    /// <summary>
-    ///     Serialize the packet into a caller-owned buffer.
-    /// </summary>
-    /// <remarks>
-    ///     Writing rather than returning keeps the packet stateless, so the same
-    ///     instance — <see cref="ConnectPacket" /> among them — can be sent repeatedly.
-    /// </remarks>
-    internal void Serialize(IBufferWriter<byte> writer)
-    {
-        // A decoder reads the announced count and refuses anything below one, so a
-        // binary packet with nothing attached is not an empty packet — it is one the
-        // server drops the connection over. It is caught here rather than in the
-        // constructor because the attachments arrive after it.
-        if ((Type is PacketType.BinaryEvent or PacketType.BinaryAck) && _attachments.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"A {Type} packet has to carry at least one binary argument; " +
-                $"use {nameof(PacketType.Event)} or {nameof(PacketType.Ack)} for a payload that has none.");
-        }
-
-        WriteHeader(writer);
-        WritePayload(writer);
-    }
-
-    private void WriteHeader(IBufferWriter<byte> writer)
-    {
-        WriteByte(writer, (byte)Type);
-
-        // The count and its dash are what mark a type 5 or 6 packet as binary, so they
-        // are written for the type rather than for the attachments happening to be
-        // there — Serialize has already refused the packet if they are not.
-        if (Type is PacketType.BinaryEvent or PacketType.BinaryAck)
-        {
-            WriteInt32(writer, _attachments.Count);
-            WriteByte(writer, (byte)'-');
-        }
-
-        // The default namespace is implied by its absence.
-        if (!string.Equals(Namespace, DefaultNamespace, StringComparison.Ordinal))
-        {
-            var length = Encoding.UTF8.GetByteCount(Namespace);
-            var span = writer.GetSpan(length + 1);
-            Encoding.UTF8.GetBytes(Namespace, span);
-            span[length] = (byte)',';
-            writer.Advance(length + 1);
-        }
-
-        if (AckId.HasValue)
-        {
-            WriteInt32(writer, AckId.Value);
-        }
-    }
-
-    private void WritePayload(IBufferWriter<byte> writer)
-    {
-        if (Type is PacketType.Connect or PacketType.Disconnect)
-        {
-            return;
-        }
-
-        using var json = new Utf8JsonWriter(writer);
-
-        // CONNECT_ERROR is the one payload that is not an argument list: it is the
-        // error object on its own.
-        if (Type == PacketType.ConnectError)
-        {
-            if (_data.Count > 0)
-            {
-                _data[0].Serialize(json);
-            }
-
-            json.Flush();
-            return;
-        }
-
-        json.WriteStartArray();
-
-        foreach (var item in _data)
-        {
-            item.Serialize(json);
-        }
-
-        json.WriteEndArray();
-        json.Flush();
-    }
-
-    private static void WriteByte(IBufferWriter<byte> writer, byte value)
-    {
-        writer.GetSpan(1)[0] = value;
-        writer.Advance(1);
-    }
-
-    private static void WriteInt32(IBufferWriter<byte> writer, int value)
-    {
-        // Room for every digit an int can produce, sign included.
-        var span = writer.GetSpan(11);
-        value.TryFormat(span, out var written);
-        writer.Advance(written);
-    }
-
-    /// <summary>
-    ///     Bring a namespace to the single form the wire uses, so that "admin",
-    ///     "/admin" and a missing namespace do not encode three different ways.
-    /// </summary>
-    private static string NormalizeNamespace(string? @namespace)
-    {
-        if (string.IsNullOrWhiteSpace(@namespace))
-        {
-            return DefaultNamespace;
-        }
-
-        var trimmed = @namespace!.Trim();
-
-        // The comma is what ends the namespace in the header, so one inside it would
-        // truncate the name and leave the remainder to be parsed as the payload.
-        if (trimmed.Contains(','))
-        {
-            throw new ArgumentException("A namespace cannot contain a comma; it is the header's separator.",
-                nameof(@namespace));
-        }
-
-        return trimmed.StartsWith('/') ? trimmed : "/" + trimmed;
-    }
-
-    /// <summary>
-    ///     Whether an event name is one the protocol keeps for itself.
-    /// </summary>
-    /// <remarks>
-    ///     A server rejects a packet whose first argument is one of these, and a
-    ///     rejected packet costs the whole connection rather than just the message.
-    /// </remarks>
-    private static bool IsReservedEventName(string @event)
-    {
-        return @event is "connect" or "connect_error" or "disconnect" or "disconnecting"
-            or "newListener" or "removeListener";
-    }
-
-    private static bool CarriesEventName(PacketType type)
-    {
-        return type is PacketType.Event or PacketType.BinaryEvent;
-    }
-
-    private static bool CarriesAckId(PacketType type)
-    {
-        return type is PacketType.Event or PacketType.Ack or PacketType.BinaryEvent or PacketType.BinaryAck;
+        throw new NotImplementedException();
     }
 }

@@ -9,7 +9,7 @@ public class BinaryEventPacketTests
     [Fact]
     void Should_Create_Binary_Event_Packet()
     {
-        var packet = new Packet(PacketType.BinaryEvent);
+        var packet = new PacketBuilder(PacketType.BinaryEvent);
         packet.AddItem(new ReadOnlyMemory<byte>([1, 2, 3]));
 
         Assert.Equal(PacketType.BinaryEvent, packet.Type);
@@ -21,7 +21,7 @@ public class BinaryEventPacketTests
     {
         var @namespace = "test";
 
-        var packet = new Packet(PacketType.BinaryEvent, @namespace);
+        var packet = new PacketBuilder(PacketType.BinaryEvent, @namespace);
 
         Assert.Equal($"/{@namespace}", packet.Namespace);
     }
@@ -31,7 +31,7 @@ public class BinaryEventPacketTests
     {
         var eventName = "test";
 
-        var packet = new Packet(PacketType.BinaryEvent, null, eventName);
+        var packet = new PacketBuilder(PacketType.BinaryEvent, null, eventName);
 
         Assert.Equal(eventName, packet.Event);
     }
@@ -41,7 +41,7 @@ public class BinaryEventPacketTests
     {
         var ackId = 42;
 
-        var packet = new Packet(PacketType.BinaryAck, ackId, null, null);
+        var packet = new PacketBuilder(PacketType.BinaryAck, ackId, null, null);
 
         Assert.Equal(ackId, packet.AckId);
     }
@@ -49,7 +49,7 @@ public class BinaryEventPacketTests
     [Fact]
     void Should_Serialize_Binary_Event_Packet()
     {
-        var packet = new Packet(PacketType.BinaryEvent);
+        var packet = new PacketBuilder(PacketType.BinaryEvent);
         packet.AddItem(new ReadOnlyMemory<byte>([1, 2, 3]));
 
         var encodedPacket = Encoding.UTF8.GetString(packet.Serialize().Span);
@@ -63,7 +63,7 @@ public class BinaryEventPacketTests
         var @namespace = "test";
         var expectedEncodedPacket = $$"""51-/{{@namespace}},["message",{"_placeholder":true,"num":0}]""";
 
-        var packet = new Packet(PacketType.BinaryEvent, @namespace);
+        var packet = new PacketBuilder(PacketType.BinaryEvent, @namespace);
         packet.AddItem(new ReadOnlyMemory<byte>([1, 2, 3]));
 
         Assert.Equal(expectedEncodedPacket, Encoding.UTF8.GetString(packet.Serialize().Span));
@@ -75,7 +75,7 @@ public class BinaryEventPacketTests
         var eventName = "test";
         var expectedEncodedPacket = $$"""51-["{{eventName}}",{"_placeholder":true,"num":0}]""";
 
-        var packet = new Packet(PacketType.BinaryEvent, null, eventName);
+        var packet = new PacketBuilder(PacketType.BinaryEvent, null, eventName);
         packet.AddItem(new ReadOnlyMemory<byte>([1, 2, 3]));
 
         Assert.Equal(expectedEncodedPacket, Encoding.UTF8.GetString(packet.Serialize().Span));
@@ -89,7 +89,7 @@ public class BinaryEventPacketTests
         // An acknowledgement answers an event rather than naming one.
         var expectedEncodedPacket = $$"""61-{{ackId}}[{"_placeholder":true,"num":0}]""";
 
-        var packet = new Packet(PacketType.BinaryAck, ackId, null, null);
+        var packet = new PacketBuilder(PacketType.BinaryAck, ackId, null, null);
         packet.AddItem(new ReadOnlyMemory<byte>([1, 2, 3]));
 
         Assert.Equal(expectedEncodedPacket, Encoding.UTF8.GetString(packet.Serialize().Span));
@@ -101,8 +101,8 @@ public class BinaryEventPacketTests
     void Should_Reject_A_Binary_Packet_Without_An_Attachment(PacketType type)
     {
         var packet = type == PacketType.BinaryAck
-            ? new Packet(type, 1, null, null)
-            : new Packet(type);
+            ? new PacketBuilder(type, 1, null, null)
+            : new PacketBuilder(type);
         packet.AddItem("Hello!");
 
         Assert.Throws<InvalidOperationException>(() => packet.Serialize());
@@ -116,7 +116,7 @@ public class BinaryEventPacketTests
         var expectedEncodedPacket =
             """52-["message",{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}]""";
 
-        var packet = new Packet(PacketType.BinaryEvent);
+        var packet = new PacketBuilder(PacketType.BinaryEvent);
         packet.AddItem(first);
         packet.AddItem(second);
 
@@ -129,7 +129,7 @@ public class BinaryEventPacketTests
     {
         var expectedEncodedPacket = """51-["message","Hello!",{"_placeholder":true,"num":0}]""";
 
-        var packet = new Packet(PacketType.BinaryEvent);
+        var packet = new PacketBuilder(PacketType.BinaryEvent);
         packet.AddItem("Hello!");
         packet.AddItem(new ReadOnlyMemory<byte>([1, 2, 3]));
 
@@ -141,7 +141,7 @@ public class BinaryEventPacketTests
     {
         byte[] attachment = [1, 2, 3];
 
-        var packet = new Packet(PacketType.BinaryEvent);
+        var packet = new PacketBuilder(PacketType.BinaryEvent);
         packet.AddItem(attachment);
 
         Assert.Equal("""51-["message",{"_placeholder":true,"num":0}]""",
@@ -154,7 +154,7 @@ public class BinaryEventPacketTests
     {
         var attachment = new ReadOnlyMemory<byte>([1, 2, 3]);
 
-        var packet = new Packet(PacketType.BinaryEvent);
+        var packet = new PacketBuilder(PacketType.BinaryEvent);
         packet.AddItem(attachment);
 
         Assert.Equal(attachment, Assert.Single(packet.Attachments));

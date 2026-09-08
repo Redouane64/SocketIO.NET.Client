@@ -42,17 +42,17 @@ public sealed class HttpPollingTransport : ITransport, IDisposable
     /// </summary>
     private Uri _requestUri = null!;
 
-    public HttpPollingTransport(string baseAddress)
+    public HttpPollingTransport(string baseAddress, string path = TransportPath.Default)
     {
         _httpClient = new HttpClient();
         _httpClient.BaseAddress = new Uri(baseAddress);
-        SetPath($"/engine.io?EIO={_protocol}&transport={Name}");
+        SetPath($"{TransportPath.Normalize(path)}?EIO={_protocol}&transport={Name}");
     }
 
-    internal HttpPollingTransport(HttpClient httpClient)
+    internal HttpPollingTransport(HttpClient httpClient, string path = TransportPath.Default)
     {
         _httpClient = httpClient;
-        SetPath($"/engine.io?EIO={_protocol}&transport={Name}");
+        SetPath($"{TransportPath.Normalize(path)}?EIO={_protocol}&transport={Name}");
     }
 
     public string Path => _path;

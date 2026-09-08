@@ -19,8 +19,33 @@ public sealed class WebSocketTransportTests
         using var transport = new WebSocketTransport(baseAddress, sid);
 
         Assert.Equal(expectedScheme, transport.Uri.Scheme);
-        Assert.Equal("/engine.io", transport.Uri.AbsolutePath);
+        Assert.Equal("/engine.io/", transport.Uri.AbsolutePath);
         Assert.Equal($"?EIO=4&transport=websocket&sid={sid}", transport.Uri.Query);
+    }
+
+    [Theory(DisplayName = "The endpoint is served from the configured path")]
+    [InlineData("/socket.io", "/socket.io/")]
+    [InlineData("socket.io", "/socket.io/")]
+    [InlineData("/socket.io/", "/socket.io/")]
+    [InlineData("", "/")]
+    void Should_Serve_From_The_Configured_Path(string path, string expectedPath)
+    {
+        using var transport = new WebSocketTransport("http://example.com", "1NkM2QzZGMjEyMTIxCg", path);
+
+        Assert.Equal(expectedPath, transport.Uri.AbsolutePath);
+    }
+
+    [Theory(DisplayName = "A slash on the base address is not doubled by the path")]
+    [InlineData("http://example.com", "/socket.io/")]
+    [InlineData("http://example.com/", "/socket.io/")]
+    [InlineData("http://example.com//", "/socket.io/")]
+    void Should_Not_Double_The_Slash_Between_Base_Address_And_Path(string baseAddress, string expectedPath)
+    {
+        // A server matches on the start of the request path, so "//socket.io/" is a
+        // path it does not recognise rather than a tidier spelling of the same one.
+        using var transport = new WebSocketTransport(baseAddress, "1NkM2QzZGMjEyMTIxCg", "/socket.io");
+
+        Assert.Equal(expectedPath, transport.Uri.AbsolutePath);
     }
 
     [Theory(DisplayName = "Required constructor arguments are rejected when missing")]

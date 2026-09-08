@@ -9,12 +9,18 @@ Task-based async (`Task`, `IAsyncEnumerable`, `Channel<T>`) rather than the even
 .NET Socket.IO clients. Prefer an `await`-able or `await foreach`-able API over an `event` when adding surface area.
 
 The Engine.IO layer is implemented (HTTP polling transport, WebSocket transport with upgrade, plain-text and binary
-packets). The Socket.IO layer on top of it — namespaces, payload send/receive — is not yet written; see the TODOs in
-`README.md`.
+packets). The Socket.IO layer on top of it is half written: `src/SocketIO.Client` encodes packets and sends them, but
+nothing parses an inbound one yet, so namespaces and acknowledgements are still open. See the TODOs in `README.md`.
 
 Protocol references:
 - Engine.IO: https://socket.io/docs/v4/engine-io-protocol
 - Socket.IO: https://socket.io/docs/v4/socket-io-protocol
+
+The reference implementation is in `node_modules` once `npm install` has run, and it is the arbiter when a question is
+about what the wire actually accepts: `node_modules/socket.io-parser` decodes a string the C# side produced, which is a
+faster and surer check than reading the spec. Its rules are stricter than they look — a binary packet must announce at
+least one attachment, an event may not be named after a reserved one, and a decode error costs the whole connection
+rather than the one packet.
 
 ## Commands
 
@@ -33,6 +39,7 @@ Running the sample end to end needs the Node test server, which lives in an npm 
 ```bash
 npm install                        # once, from the repo root
 npm run start:server               # Engine.IO server on http://127.0.0.1:9854 (scripts/run-server.sh wraps this)
+npm run start:socket-server        # Socket.IO server on http://127.0.0.1:9855
 dotnet run --project samples/PingPong
 ```
 
@@ -78,9 +85,11 @@ values being the *ASCII byte* of the digit (`Open = 0x30`, i.e. `'0'`) so parsin
 - `.editorconfig` is authoritative and unusually strict: `end_of_line = crlf`, `insert_final_newline = false`,
   `var` is disallowed where the type is not apparent, and `using` groups are separated with `System` first. Run
   `dotnet format` rather than hand-matching it.
-- `AssemblyInfo.cs` grants `InternalsVisibleTo("EngineIO.Client.Tests")`. Transports expose `internal` constructors that
-  accept an injected `HttpClient` purely so tests can supply a mocked `HttpMessageHandler` — follow that pattern for new
-  transports instead of adding public seams.
+- `AssemblyInfo.cs` grants `InternalsVisibleTo` to the matching test project, and `EngineIO.Client` also grants it to
+  `SocketIO.Client` so the layer above can reach the same seam. `Engine`, `IO` and the transports expose `internal`
+  constructors that accept an injected `HttpClient` purely so tests can supply a stubbed handler — follow that pattern
+  instead of adding public seams. `EngineIO.Client.Tests` mocks the handler with Moq; `SocketIO.Client.Tests` takes no
+  such dependency and uses the hand-rolled `FakePollingServer`.
 - Logging is optional throughout: `ILoggerFactory` is nullable everywhere and callers may pass nothing.
 
 ## Other agent configs present

@@ -27,8 +27,14 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     private readonly HttpClient? _httpClient;
     private readonly IWebSocket? _webSocket;
     private readonly ILogger<Engine>? _logger;
-    private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
-    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+
+    /// <summary>
+    ///     Replaced on a retry: a failed attempt completes the stream and cancels
+    ///     polling, so reusing either would end the next connection before it began.
+    /// </summary>
+    private Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
+
+    private CancellationTokenSource _pollingCancellationTokenSource = new();
 
     /// <summary>
     ///     How long the connection may go without a server ping before it is
@@ -82,7 +88,22 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         _webSocket = webSocket;
     }
 
-    public bool Connected => _transport.Connected;
+    /// <summary>
+    ///     Whether a transport is currently connected. False before
+    ///     <see cref="ConnectAsync" /> has succeeded, and false again once the
+    ///     connection has gone away.
+    /// </summary>
+    public bool Connected => _transport?.Connected ?? false;
+
+    /// <summary>
+    ///     Why the last connection attempt failed, or <c>null</c> if none has.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="ConnectAsync" /> reports failure through the packet stream rather
+    ///     than by throwing, so a caller that does not listen — a protocol layered on
+    ///     top, deciding whether it may send — has no other way to see the reason.
+    /// </remarks>
+    public Exception? ConnectionError { get; private set; }
 
     /// <summary>
     ///     Name of the transport currently in use, so tests can tell whether the
@@ -142,9 +163,11 @@ public sealed class Engine : IDisposable, IAsyncDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
+        ResetPreviousConnection();
+
         _transport = _httpTransport = _httpClient is null
-            ? new HttpPollingTransport(_clientOptions.BaseAddress)
-            : new HttpPollingTransport(_httpClient);
+            ? new HttpPollingTransport(_clientOptions.BaseAddress, _clientOptions.Path)
+            : new HttpPollingTransport(_httpClient, _clientOptions.Path);
         try
         {
             await _httpTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
@@ -157,17 +180,24 @@ public sealed class Engine : IDisposable, IAsyncDisposable
 
         if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades!.Contains("websocket"))
         {
+            // The upgrade is an optimisation, not a requirement: a probe the server
+            // never answers leaves the polling transport connected and in charge, so
+            // it is repointed only once the WebSocket has taken over.
+            WebSocketTransport? wsTransport = null;
             try
             {
-                _transport = _wsTransport = _webSocket is null
-                    ? new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!)
-                    : new WebSocketTransport(_webSocket, _clientOptions.BaseAddress, _httpTransport.Sid!);
-                await _wsTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                wsTransport = _webSocket is null
+                    ? new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!, _clientOptions.Path)
+                    : new WebSocketTransport(_webSocket, _clientOptions.BaseAddress, _httpTransport.Sid!,
+                        _clientOptions.Path);
+                await wsTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+
+                _transport = _wsTransport = wsTransport;
             }
             catch (Exception exception)
             {
-                HandleException(exception);
-                return;
+                _logger?.LogWarning(exception, "Upgrade to websocket failed; staying on HTTP long-polling.");
+                wsTransport?.Dispose();
             }
         }
 
@@ -257,9 +287,34 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         _heartbeatCts?.CancelAfter(_heartbeatTimeoutMs);
     }
 
+    /// <summary>
+    ///     Give a reconnection the clean state it needs.
+    /// </summary>
+    /// <remarks>
+    ///     Whatever ended the last connection — a handshake that failed, a close the
+    ///     server sent, a heartbeat that ran out — cancelled polling and completed the
+    ///     packet stream. Both are one-shot, so a second <see cref="ConnectAsync" />
+    ///     would otherwise hand back a connection whose receive loop exits immediately.
+    /// </remarks>
+    private void ResetPreviousConnection()
+    {
+        // Nothing to reset before the first attempt, and nothing to reset while a
+        // connection is still up.
+        if (_transport is null || Connected)
+        {
+            return;
+        }
+
+        ConnectionError = null;
+        _pollingCancellationTokenSource.Dispose();
+        _pollingCancellationTokenSource = new CancellationTokenSource();
+        _packetsChannel = Channel.CreateUnbounded<Packet>();
+    }
+
     private void HandleException(Exception exception)
     {
         _logger?.LogError(exception, exception.Message);
+        ConnectionError = exception;
 
         // End the stream with the reason it ended. A listener can then tell a
         // connection that died from one the server closed by agreement, which
@@ -308,6 +363,21 @@ public sealed class Engine : IDisposable, IAsyncDisposable
                 yield return packet;
             }
         }
+    }
+
+    /// <summary>
+    ///     Send a packet as it stands, leaving its framing to the current transport.
+    /// </summary>
+    /// <remarks>
+    ///     A protocol layered on top of Engine.io does its own encoding and has to say
+    ///     which Engine.io packet carries the result — a decision the text and binary
+    ///     overloads make on the caller's behalf.
+    /// </remarks>
+    /// <param name="packet">Packet to send</param>
+    /// <param name="cancellationToken"></param>
+    public async Task SendAsync(Packet packet, CancellationToken cancellationToken = default)
+    {
+        await _transport.SendAsync(packet, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -15,7 +15,18 @@ public class HttpPollingTransportTests
     void Should_Create_Transport()
     {
         var transport = new HttpPollingTransport("http://127.0.0.1:3000");
-        Assert.Equal($"/engine.io?EIO=4&transport=polling", transport.Path);
+        Assert.Equal($"/engine.io/?EIO=4&transport=polling", transport.Path);
+    }
+
+    [Theory(DisplayName = "The endpoint is served from the configured path")]
+    [InlineData("/socket.io", "/socket.io/")]
+    [InlineData("socket.io", "/socket.io/")]
+    [InlineData("/socket.io/", "/socket.io/")]
+    [InlineData("", "/")]
+    void Should_Serve_From_The_Configured_Path(string path, string expectedPath)
+    {
+        var transport = new HttpPollingTransport("http://127.0.0.1:3000", path);
+        Assert.Equal($"{expectedPath}?EIO=4&transport=polling", transport.Path);
     }
 
     [Fact]
@@ -101,7 +112,7 @@ public class HttpPollingTransportTests
         Assert.Equal(pingInterval, transport.PingInterval);
         Assert.Equal(pingTimeout, transport.PingTimeout);
         Assert.Equal(upgrades, transport.Upgrades);
-        Assert.Equal($"/engine.io?EIO=4&transport=polling&sid={sid}", transport.Path);
+        Assert.Equal($"/engine.io/?EIO=4&transport=polling&sid={sid}", transport.Path);
     }
 
     [Theory(DisplayName = "Separators that enclose no payload are skipped")]

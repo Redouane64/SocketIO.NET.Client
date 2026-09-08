@@ -15,8 +15,11 @@ The client implements `Engine.IO` and `Socket.IO` core protocols.
 
 - **Socket.IO Client**
 
+- [x] Packet model and wire-format serialization (events, acks, binary attachments)
+- [x] Send plain text, JSON and binary payloads
+- [ ] Packet parsing (receiving)
 - [ ] Namespaces support
-- [ ] Send and receive plain text and binary payloads
+- [ ] Acknowledgement correlation
 
 ## Resources
 

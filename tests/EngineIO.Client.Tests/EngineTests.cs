@@ -213,6 +213,40 @@ public class EngineTests
         Assert.Equal(ErrorReason.InvalidPacket, exception.ErrorReason);
     }
 
+    [Fact(DisplayName = "A failed attempt does not poison the connection that follows")]
+    async Task Should_Connect_After_A_Failed_Attempt()
+    {
+        var (engine, _) = CreateEngine(Packet("4Hello"), Handshake(), Packet("4Hi"), Packet("1"));
+
+        await engine.ConnectAsync();
+        Assert.False(engine.Connected);
+
+        await engine.ConnectAsync();
+
+        Assert.True(engine.Connected);
+        Assert.Null(engine.ConnectionError);
+
+        // The first attempt completed the packet stream with its reason; a retry that
+        // reused it would hand back a connection that never delivers anything.
+        var received = await Drain(engine);
+        Assert.Equal("Hi", Encoding.UTF8.GetString(Assert.Single(received).Body.Span));
+    }
+
+    [Fact(DisplayName = "A connection the server closed can be opened again")]
+    async Task Should_Connect_Again_After_The_Server_Closed_The_Connection()
+    {
+        var (engine, _) = CreateEngine(Handshake(), Packet("1"), Handshake(), Packet("4Hi"), Packet("1"));
+
+        await engine.ConnectAsync();
+        await Drain(engine);
+        Assert.False(engine.Connected);
+
+        await engine.ConnectAsync();
+
+        Assert.True(engine.Connected);
+        Assert.Equal("Hi", Encoding.UTF8.GetString(Assert.Single(await Drain(engine)).Body.Span));
+    }
+
     [Fact(DisplayName = "An upgrade that fails leaves the polling transport in charge")]
     async Task Should_Stay_On_Polling_When_The_Upgrade_Fails()
     {

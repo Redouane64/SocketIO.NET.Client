@@ -27,8 +27,14 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     private readonly HttpClient? _httpClient;
     private readonly IWebSocket? _webSocket;
     private readonly ILogger<Engine>? _logger;
-    private readonly Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
-    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+
+    /// <summary>
+    ///     Replaced on a retry: a failed attempt completes the stream and cancels
+    ///     polling, so reusing either would end the next connection before it began.
+    /// </summary>
+    private Channel<Packet> _packetsChannel = Channel.CreateUnbounded<Packet>();
+
+    private CancellationTokenSource _pollingCancellationTokenSource = new();
 
     /// <summary>
     ///     How long the connection may go without a server ping before it is
@@ -157,6 +163,8 @@ public sealed class Engine : IDisposable, IAsyncDisposable
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
+        ResetPreviousConnection();
+
         _transport = _httpTransport = _httpClient is null
             ? new HttpPollingTransport(_clientOptions.BaseAddress, _clientOptions.Path)
             : new HttpPollingTransport(_httpClient, _clientOptions.Path);
@@ -277,6 +285,30 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     {
         // Reschedules the existing timer rather than building new cancellation state.
         _heartbeatCts?.CancelAfter(_heartbeatTimeoutMs);
+    }
+
+    /// <summary>
+    ///     Give a reconnection the clean state it needs.
+    /// </summary>
+    /// <remarks>
+    ///     Whatever ended the last connection — a handshake that failed, a close the
+    ///     server sent, a heartbeat that ran out — cancelled polling and completed the
+    ///     packet stream. Both are one-shot, so a second <see cref="ConnectAsync" />
+    ///     would otherwise hand back a connection whose receive loop exits immediately.
+    /// </remarks>
+    private void ResetPreviousConnection()
+    {
+        // Nothing to reset before the first attempt, and nothing to reset while a
+        // connection is still up.
+        if (_transport is null || Connected)
+        {
+            return;
+        }
+
+        ConnectionError = null;
+        _pollingCancellationTokenSource.Dispose();
+        _pollingCancellationTokenSource = new CancellationTokenSource();
+        _packetsChannel = Channel.CreateUnbounded<Packet>();
     }
 
     private void HandleException(Exception exception)

@@ -95,6 +95,19 @@ public class BinaryEventPacketTests
         Assert.Equal(expectedEncodedPacket, Encoding.UTF8.GetString(packet.Serialize().Span));
     }
 
+    [Theory(DisplayName = "A decoder refuses a binary packet that announces nothing to attach")]
+    [InlineData(PacketType.BinaryEvent)]
+    [InlineData(PacketType.BinaryAck)]
+    void Should_Reject_A_Binary_Packet_Without_An_Attachment(PacketType type)
+    {
+        var packet = type == PacketType.BinaryAck
+            ? new Packet(type, 1, null, null)
+            : new Packet(type);
+        packet.AddItem("Hello!");
+
+        Assert.Throws<InvalidOperationException>(() => packet.Serialize());
+    }
+
     [Fact(DisplayName = "Attachments are numbered in the order they were added")]
     void Should_Number_Attachments_In_Order()
     {

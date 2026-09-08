@@ -46,6 +46,12 @@ public class EventPacketTests
         Assert.Equal("""2/test,["message","Hello!"]""", Encoding.UTF8.GetString(packet.Serialize().Span));
     }
 
+    [Fact(DisplayName = "A comma would end the namespace early, so one is refused")]
+    void Should_Reject_A_Namespace_Containing_A_Comma()
+    {
+        Assert.Throws<ArgumentException>(() => new Packet(PacketType.Event, "a,b"));
+    }
+
     [Fact]
     void Should_Create_Event_Packet_With_Event_Name()
     {
@@ -56,6 +62,18 @@ public class EventPacketTests
         Assert.Equal(PacketType.Event, packet.Type);
         Assert.Equal("/", packet.Namespace);
         Assert.Equal(eventName, packet.Event);
+    }
+
+    [Theory(DisplayName = "An event name the protocol keeps for itself is refused")]
+    [InlineData("connect")]
+    [InlineData("connect_error")]
+    [InlineData("disconnect")]
+    [InlineData("disconnecting")]
+    [InlineData("newListener")]
+    [InlineData("removeListener")]
+    void Should_Reject_A_Reserved_Event_Name(string eventName)
+    {
+        Assert.Throws<ArgumentException>(() => new Packet(PacketType.Event, null, eventName));
     }
 
     [Fact]
@@ -84,7 +102,38 @@ public class EventPacketTests
     [Fact(DisplayName = "An acknowledgement does not carry an event name")]
     void Should_Reject_An_Event_Name_On_An_Acknowledgement()
     {
-        Assert.Throws<ArgumentException>(() => new Packet(PacketType.Ack, null, "test"));
+        Assert.Throws<ArgumentException>(() => new Packet(PacketType.Ack, 1, null, "test"));
+    }
+
+    [Theory(DisplayName = "An acknowledgement has to name the event it answers")]
+    [InlineData(PacketType.Ack)]
+    [InlineData(PacketType.BinaryAck)]
+    void Should_Reject_An_Acknowledgement_Without_An_Ack_Id(PacketType type)
+    {
+        Assert.Throws<ArgumentException>(() => new Packet(type, null, null));
+    }
+
+    [Theory(DisplayName = "A sign would be read as the start of the payload")]
+    [InlineData(-1)]
+    [InlineData(int.MinValue)]
+    void Should_Reject_A_Negative_Ack_Id(int ackId)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Packet(PacketType.Event, ackId, null, null));
+    }
+
+    [Theory(DisplayName = "Only the types that take part in one carry an ack id")]
+    [InlineData(PacketType.Connect)]
+    [InlineData(PacketType.Disconnect)]
+    [InlineData(PacketType.ConnectError)]
+    void Should_Reject_An_Ack_Id_On_A_Type_That_Cannot_Carry_One(PacketType type)
+    {
+        Assert.Throws<ArgumentException>(() => new Packet(type, 1, null, null));
+    }
+
+    [Fact]
+    void Should_Reject_An_Unknown_Packet_Type()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Packet((PacketType)0x39));
     }
 
     [Fact]

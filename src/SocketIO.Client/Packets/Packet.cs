@@ -40,16 +40,30 @@ public sealed class Packet
     private readonly List<ReadOnlyMemory<byte>> _attachments = new();
 
     public Packet(PacketType type)
-        : this(type, null, null)
+        : this(type, null, null, null)
     {
     }
 
     public Packet(PacketType type, string? @namespace)
-        : this(type, @namespace, null)
+        : this(type, @namespace, null, null)
     {
     }
 
     public Packet(PacketType type, string? @namespace, string? @event)
+        : this(type, @namespace, @event, null)
+    {
+    }
+
+    public Packet(PacketType type, int ackId, string? @namespace, string? @event)
+        : this(type, @namespace, @event, ackId)
+    {
+    }
+
+    /// <summary>
+    ///     The one constructor that validates, so that no combination reaches the
+    ///     wire without having been checked.
+    /// </summary>
+    private Packet(PacketType type, string? @namespace, string? @event, int? ackId)
     {
         if (!Enum.IsDefined(type))
         {
@@ -61,8 +75,29 @@ public sealed class Packet
             throw new ArgumentException($"A {type} packet does not carry an event name.", nameof(@event));
         }
 
+        if (ackId.HasValue && !CarriesAckId(type))
+        {
+            throw new ArgumentException($"A {type} packet cannot carry an acknowledgement id.", nameof(type));
+        }
+
+        if (ackId is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(ackId), ackId,
+                "An acknowledgement id is a non-negative number; a sign would be read as the start of the payload.");
+        }
+
+        // An acknowledgement that names no id answers nothing: the server looks the id
+        // up among the callbacks it is waiting on and discards the packet when it is
+        // missing, so it is refused here rather than sent into the void.
+        if (!ackId.HasValue && type is PacketType.Ack or PacketType.BinaryAck)
+        {
+            throw new ArgumentException($"A {type} packet has to name the acknowledgement it answers.",
+                nameof(ackId));
+        }
+
         Type = type;
         Namespace = NormalizeNamespace(@namespace);
+        AckId = ackId;
 
         if (!CarriesEventName(type))
         {
@@ -72,18 +107,15 @@ public sealed class Packet
         // The event name is not header material: it is the first argument of the
         // payload array, which is why it is seeded as an item like any other.
         Event = @event ?? DefaultEventName;
-        _data.Add(new TextPacketData(Event));
-    }
 
-    public Packet(PacketType type, int ackId, string? @namespace, string? @event)
-        : this(type, @namespace, @event)
-    {
-        if (!CarriesAckId(type))
+        if (IsReservedEventName(Event))
         {
-            throw new ArgumentException($"A {type} packet cannot carry an acknowledgement id.", nameof(type));
+            throw new ArgumentException(
+                $"\"{Event}\" is reserved by the protocol; a packet naming it is rejected by the server.",
+                nameof(@event));
         }
 
-        AckId = ackId;
+        _data.Add(new TextPacketData(Event));
     }
 
     /// <summary>
@@ -208,6 +240,17 @@ public sealed class Packet
     /// </remarks>
     internal void Serialize(IBufferWriter<byte> writer)
     {
+        // A decoder reads the announced count and refuses anything below one, so a
+        // binary packet with nothing attached is not an empty packet — it is one the
+        // server drops the connection over. It is caught here rather than in the
+        // constructor because the attachments arrive after it.
+        if ((Type is PacketType.BinaryEvent or PacketType.BinaryAck) && _attachments.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"A {Type} packet has to carry at least one binary argument; " +
+                $"use {nameof(PacketType.Event)} or {nameof(PacketType.Ack)} for a payload that has none.");
+        }
+
         WriteHeader(writer);
         WritePayload(writer);
     }
@@ -216,7 +259,10 @@ public sealed class Packet
     {
         WriteByte(writer, (byte)Type);
 
-        if (_attachments.Count > 0)
+        // The count and its dash are what mark a type 5 or 6 packet as binary, so they
+        // are written for the type rather than for the attachments happening to be
+        // there — Serialize has already refused the packet if they are not.
+        if (Type is PacketType.BinaryEvent or PacketType.BinaryAck)
         {
             WriteInt32(writer, _attachments.Count);
             WriteByte(writer, (byte)'-');
@@ -297,7 +343,29 @@ public sealed class Packet
         }
 
         var trimmed = @namespace!.Trim();
+
+        // The comma is what ends the namespace in the header, so one inside it would
+        // truncate the name and leave the remainder to be parsed as the payload.
+        if (trimmed.Contains(','))
+        {
+            throw new ArgumentException("A namespace cannot contain a comma; it is the header's separator.",
+                nameof(@namespace));
+        }
+
         return trimmed.StartsWith('/') ? trimmed : "/" + trimmed;
+    }
+
+    /// <summary>
+    ///     Whether an event name is one the protocol keeps for itself.
+    /// </summary>
+    /// <remarks>
+    ///     A server rejects a packet whose first argument is one of these, and a
+    ///     rejected packet costs the whole connection rather than just the message.
+    /// </remarks>
+    private static bool IsReservedEventName(string @event)
+    {
+        return @event is "connect" or "connect_error" or "disconnect" or "disconnecting"
+            or "newListener" or "removeListener";
     }
 
     private static bool CarriesEventName(PacketType type)

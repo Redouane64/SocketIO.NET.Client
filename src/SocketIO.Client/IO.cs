@@ -38,6 +38,17 @@ public sealed class IO : IAsyncDisposable
     /// </summary>
     private readonly SemaphoreSlim _connectLock = new(1, 1);
 
+    /// <summary>
+    ///     Holds a packet and its attachments together on the wire.
+    /// </summary>
+    /// <remarks>
+    ///     A binary packet is several Engine.io packets that a decoder reads as one
+    ///     run: the header, then exactly as many binary packets as it announced.
+    ///     Another packet landing in the middle of that run is a protocol error, and
+    ///     the transports only serialize sends one at a time — not in groups.
+    /// </remarks>
+    private readonly SemaphoreSlim _sendLock = new(1, 1);
+
     public IO(string baseAddress, string path = DefaultPath, ILoggerFactory? loggerFactory = null)
     {
         Path = path;
@@ -82,6 +93,7 @@ public sealed class IO : IAsyncDisposable
     {
         await _client.DisposeAsync().ConfigureAwait(false);
         _connectLock.Dispose();
+        _sendLock.Dispose();
     }
 
     /// <summary>
@@ -222,15 +234,25 @@ public sealed class IO : IAsyncDisposable
                 $"Not connected. Call {nameof(ConnectAsync)} before sending.", _client.ConnectionError);
         }
 
-        // The header travels as a plain-text Engine.io message; each attachment then
-        // follows as its own binary message, in the order its placeholder named it.
-        await _client.SendAsync(EnginePacket.CreateMessagePacket(packet.Serialize()), cancellationToken)
-            .ConfigureAwait(false);
+        await _sendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-        foreach (var attachment in packet.Attachments)
+        try
         {
-            await _client.SendAsync(EnginePacket.CreateBinaryPacket(attachment), cancellationToken)
+            // The header travels as a plain-text Engine.io message; each attachment
+            // then follows as its own binary message, in the order its placeholder
+            // named it. Nothing may come between them.
+            await _client.SendAsync(EnginePacket.CreateMessagePacket(packet.Serialize()), cancellationToken)
                 .ConfigureAwait(false);
+
+            foreach (var attachment in packet.Attachments)
+            {
+                await _client.SendAsync(EnginePacket.CreateBinaryPacket(attachment), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _sendLock.Release();
         }
     }
 }

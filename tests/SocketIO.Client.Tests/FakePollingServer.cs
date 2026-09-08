@@ -37,6 +37,12 @@ public sealed class FakePollingServer : HttpMessageHandler
     /// </summary>
     public TimeSpan PollDelay { get; init; } = TimeSpan.FromMilliseconds(20);
 
+    /// <summary>
+    ///     How long a POST takes. A send that overlaps another is what makes an
+    ///     interleaving visible, so the ordering tests widen this window.
+    /// </summary>
+    public TimeSpan PostDelay { get; init; } = TimeSpan.Zero;
+
     public IReadOnlyList<CapturedRequest> Requests
     {
         get
@@ -81,6 +87,11 @@ public sealed class FakePollingServer : HttpMessageHandler
 
         if (request.Method != HttpMethod.Get)
         {
+            if (PostDelay > TimeSpan.Zero)
+            {
+                await Task.Delay(PostDelay, cancellationToken);
+            }
+
             return Ok("ok"u8.ToArray());
         }
 

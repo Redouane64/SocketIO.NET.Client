@@ -121,11 +121,46 @@ public class IOTests
         }
     }
 
+    [Fact(DisplayName = "Concurrent binary sends do not interleave their attachments")]
+    async Task Should_Keep_A_Binary_Packet_And_Its_Attachments_Together()
+    {
+        const int senders = 16;
+
+        // A send that overlaps another is what would let a second header land between
+        // a first header and the attachment it announced.
+        var (io, server) = CreateClient(TimeSpan.FromMilliseconds(5), FakePollingServer.Handshake());
+
+        await using (io)
+        {
+            await io.ConnectAsync();
+
+            await Task.WhenAll(Enumerable.Range(0, senders)
+                .Select(i => io.SendAsync(new byte[] { (byte)i }))
+                .ToArray());
+
+            // The CONNECT packet, then one header and one attachment per sender.
+            var posts = server.Posts.Skip(1).ToArray();
+            Assert.Equal(senders * 2, posts.Length);
+
+            for (var i = 0; i < senders; i++)
+            {
+                Assert.StartsWith("451-", posts[i * 2]);
+                Assert.StartsWith("b", posts[(i * 2) + 1]);
+            }
+        }
+    }
+
     private static (IO Client, FakePollingServer Server) CreateClient(params byte[][] pollResponses)
+    {
+        return CreateClient(TimeSpan.Zero, pollResponses);
+    }
+
+    private static (IO Client, FakePollingServer Server) CreateClient(
+        TimeSpan postDelay, params byte[][] pollResponses)
     {
         // No websocket among the advertised upgrades, so the client stays on polling
         // and every packet it sends is a POST this server can be asked about.
-        var server = new FakePollingServer(pollResponses);
+        var server = new FakePollingServer(pollResponses) { PostDelay = postDelay };
         var httpClient = new HttpClient(server) { BaseAddress = new Uri("http://foo.bar") };
 
         return (new IO(httpClient, "http://foo.bar"), server);

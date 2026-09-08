@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -41,13 +42,30 @@ public sealed class IO : IAsyncDisposable
     {
         Path = path;
 
-        _client = new Engine(options =>
+        _client = new Engine(Configure(baseAddress, path), loggerFactory);
+    }
+
+    /// <summary>
+    ///     Drives the connection from a supplied <see cref="HttpClient" />, so the
+    ///     protocol behaviour can be exercised against a stubbed server.
+    /// </summary>
+    internal IO(HttpClient httpClient, string baseAddress, string path = DefaultPath,
+        ILoggerFactory? loggerFactory = null)
+    {
+        Path = path;
+
+        _client = new Engine(Configure(baseAddress, path), httpClient, loggerFactory: loggerFactory);
+    }
+
+    private static Action<ClientOptions> Configure(string baseAddress, string path)
+    {
+        return options =>
         {
             options.BaseAddress = baseAddress;
             options.Path = path;
             options.AutoUpgrade = true;
             // TODO: allow passing custom headers and queries
-        }, loggerFactory);
+        };
     }
 
     /// <summary>

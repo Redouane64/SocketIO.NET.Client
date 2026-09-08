@@ -82,7 +82,22 @@ public sealed class Engine : IDisposable, IAsyncDisposable
         _webSocket = webSocket;
     }
 
-    public bool Connected => _transport.Connected;
+    /// <summary>
+    ///     Whether a transport is currently connected. False before
+    ///     <see cref="ConnectAsync" /> has succeeded, and false again once the
+    ///     connection has gone away.
+    /// </summary>
+    public bool Connected => _transport?.Connected ?? false;
+
+    /// <summary>
+    ///     Why the last connection attempt failed, or <c>null</c> if none has.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="ConnectAsync" /> reports failure through the packet stream rather
+    ///     than by throwing, so a caller that does not listen — a protocol layered on
+    ///     top, deciding whether it may send — has no other way to see the reason.
+    /// </remarks>
+    public Exception? ConnectionError { get; private set; }
 
     /// <summary>
     ///     Name of the transport currently in use, so tests can tell whether the
@@ -261,6 +276,7 @@ public sealed class Engine : IDisposable, IAsyncDisposable
     private void HandleException(Exception exception)
     {
         _logger?.LogError(exception, exception.Message);
+        ConnectionError = exception;
 
         // End the stream with the reason it ended. A listener can then tell a
         // connection that died from one the server closed by agreement, which

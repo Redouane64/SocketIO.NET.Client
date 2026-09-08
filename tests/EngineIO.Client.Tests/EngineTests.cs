@@ -192,6 +192,27 @@ public class EngineTests
         await engine.DisconnectAsync();
     }
 
+    [Fact]
+    void Connected_Should_Be_False_Before_Connecting()
+    {
+        var (engine, _) = CreateEngine(Handshake());
+
+        Assert.False(engine.Connected);
+        Assert.Null(engine.ConnectionError);
+    }
+
+    [Fact(DisplayName = "A handshake that fails is reported rather than thrown")]
+    async Task ConnectionError_Should_Report_Why_The_Handshake_Failed()
+    {
+        var (engine, _) = CreateEngine(Packet("4Hello"));
+
+        await engine.ConnectAsync();
+
+        Assert.False(engine.Connected);
+        var exception = Assert.IsType<TransportException>(engine.ConnectionError);
+        Assert.Equal(ErrorReason.InvalidPacket, exception.ErrorReason);
+    }
+
     private static (Engine Engine, List<CapturedRequest> Requests) CreateEngine(
         FakeWebSocket socket, params byte[][] responses)
     {

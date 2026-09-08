@@ -63,7 +63,11 @@ public sealed class WebSocketTransport : ITransport, IDisposable
             baseAddress = baseAddress.Replace("https://", "wss://");
         }
 
-        var uri = $"{baseAddress}{TransportPath.Normalize(path)}?EIO={_protocol}&transport={Name}&sid={sid}";
+        // The normalized path already opens with a slash, so one left on the base
+        // address would produce "//engine.io/", which a server matching on the start
+        // of the request path does not recognise.
+        var uri = $"{baseAddress.TrimEnd('/')}{TransportPath.Normalize(path)}" +
+                  $"?EIO={_protocol}&transport={Name}&sid={sid}";
         _uri = new Uri(uri);
     }
 

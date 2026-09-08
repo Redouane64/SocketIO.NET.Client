@@ -35,6 +35,19 @@ public sealed class WebSocketTransportTests
         Assert.Equal(expectedPath, transport.Uri.AbsolutePath);
     }
 
+    [Theory(DisplayName = "A slash on the base address is not doubled by the path")]
+    [InlineData("http://example.com", "/socket.io/")]
+    [InlineData("http://example.com/", "/socket.io/")]
+    [InlineData("http://example.com//", "/socket.io/")]
+    void Should_Not_Double_The_Slash_Between_Base_Address_And_Path(string baseAddress, string expectedPath)
+    {
+        // A server matches on the start of the request path, so "//socket.io/" is a
+        // path it does not recognise rather than a tidier spelling of the same one.
+        using var transport = new WebSocketTransport(baseAddress, "1NkM2QzZGMjEyMTIxCg", "/socket.io");
+
+        Assert.Equal(expectedPath, transport.Uri.AbsolutePath);
+    }
+
     [Theory(DisplayName = "Required constructor arguments are rejected when missing")]
     [InlineData(null, "1NkM2QzZGMjEyMTIxCg")]
     [InlineData("", "1NkM2QzZGMjEyMTIxCg")]

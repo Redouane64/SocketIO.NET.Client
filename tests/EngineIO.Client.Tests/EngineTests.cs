@@ -213,6 +213,26 @@ public class EngineTests
         Assert.Equal(ErrorReason.InvalidPacket, exception.ErrorReason);
     }
 
+    [Fact(DisplayName = "An upgrade that fails leaves the polling transport in charge")]
+    async Task Should_Stay_On_Polling_When_The_Upgrade_Fails()
+    {
+        // A pong without the "probe" payload is an unrelated pong, so the upgrade is
+        // never acknowledged.
+        var socket = new FakeWebSocket();
+        socket.QueueText("3");
+        var (engine, _) = CreateEngine(socket, Handshake(), Packet("4Hello"), Packet("1"));
+
+        await engine.ConnectAsync();
+
+        Assert.True(engine.Connected);
+        Assert.Equal("polling", engine.TransportName);
+        Assert.Null(engine.ConnectionError);
+
+        // The upgrade is an optimisation; losing it must not cost the connection.
+        var received = await Drain(engine);
+        Assert.Equal("Hello", Encoding.UTF8.GetString(Assert.Single(received).Body.Span));
+    }
+
     private static (Engine Engine, List<CapturedRequest> Requests) CreateEngine(
         FakeWebSocket socket, params byte[][] responses)
     {

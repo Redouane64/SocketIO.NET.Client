@@ -172,18 +172,24 @@ public sealed class Engine : IDisposable, IAsyncDisposable
 
         if (_clientOptions.AutoUpgrade && _httpTransport.Upgrades!.Contains("websocket"))
         {
+            // The upgrade is an optimisation, not a requirement: a probe the server
+            // never answers leaves the polling transport connected and in charge, so
+            // it is repointed only once the WebSocket has taken over.
+            WebSocketTransport? wsTransport = null;
             try
             {
-                _transport = _wsTransport = _webSocket is null
+                wsTransport = _webSocket is null
                     ? new WebSocketTransport(_clientOptions.BaseAddress, _httpTransport.Sid!, _clientOptions.Path)
                     : new WebSocketTransport(_webSocket, _clientOptions.BaseAddress, _httpTransport.Sid!,
                         _clientOptions.Path);
-                await _wsTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                await wsTransport.ConnectAsync(cancellationToken).ConfigureAwait(false);
+
+                _transport = _wsTransport = wsTransport;
             }
             catch (Exception exception)
             {
-                HandleException(exception);
-                return;
+                _logger?.LogWarning(exception, "Upgrade to websocket failed; staying on HTTP long-polling.");
+                wsTransport?.Dispose();
             }
         }
 

@@ -8,6 +8,7 @@ using EngineIO.Client;
 
 using Microsoft.Extensions.Logging;
 
+using SocketIO.Client.Exceptions;
 using SocketIO.Client.Packets;
 
 using EnginePacket = EngineIO.Client.Packets.Packet;
@@ -32,11 +33,10 @@ public sealed class IO : IAsyncDisposable
     private readonly Dictionary<string, string> _namespaces = new();
 
     /// <summary>
-    ///     Whether the underlying Engine.io connection has been established, tracked
-    ///     here because <see cref="Engine.Connected" /> has no transport to answer for
-    ///     until it has.
+    ///     Serializes connection attempts, so that two callers joining a namespace at
+    ///     once open one Engine.io connection between them rather than one each.
     /// </summary>
-    private bool _connected;
+    private readonly SemaphoreSlim _connectLock = new(1, 1);
 
     public IO(string baseAddress, string path = DefaultPath, ILoggerFactory? loggerFactory = null)
     {
@@ -73,9 +73,15 @@ public sealed class IO : IAsyncDisposable
     /// </summary>
     public string Path { get; }
 
+    /// <summary>
+    ///     Whether the underlying Engine.io connection is established.
+    /// </summary>
+    public bool Connected => _client.Connected;
+
     public async ValueTask DisposeAsync()
     {
         await _client.DisposeAsync().ConfigureAwait(false);
+        _connectLock.Dispose();
     }
 
     /// <summary>
@@ -85,15 +91,36 @@ public sealed class IO : IAsyncDisposable
     /// <param name="cancellationToken"></param>
     public async Task ConnectAsync(string? @namespace = default, CancellationToken cancellationToken = default)
     {
-        if (!_connected)
+        // Built before the connection is touched, so a namespace the protocol refuses
+        // does not leave a connection open behind it.
+        var packet = new Packet(PacketType.Connect, @namespace);
+
+        await _connectLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
         {
-            await _client.ConnectAsync(cancellationToken).ConfigureAwait(false);
-            _connected = true;
+            if (!_client.Connected)
+            {
+                await _client.ConnectAsync(cancellationToken).ConfigureAwait(false);
+
+                // Engine.io reports a failed handshake through its packet stream
+                // rather than by throwing, so a caller that only ever sends would
+                // otherwise go on writing to a transport that never came up.
+                if (!_client.Connected)
+                {
+                    throw new IOConnectionException(
+                        "The Engine.io connection could not be established.", _client.ConnectionError);
+                }
+            }
+        }
+        finally
+        {
+            _connectLock.Release();
         }
 
         // TODO: the server answers with `0{"sid":"..."}` for the namespace, which is
         // what _namespaces is waiting for. Recording it needs the inbound parser.
-        await SendPacketAsync(new Packet(PacketType.Connect, @namespace), cancellationToken).ConfigureAwait(false);
+        await SendPacketAsync(packet, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -189,6 +216,12 @@ public sealed class IO : IAsyncDisposable
 
     private async Task SendPacketAsync(Packet packet, CancellationToken cancellationToken)
     {
+        if (!_client.Connected)
+        {
+            throw new IOConnectionException(
+                $"Not connected. Call {nameof(ConnectAsync)} before sending.", _client.ConnectionError);
+        }
+
         // The header travels as a plain-text Engine.io message; each attachment then
         // follows as its own binary message, in the order its placeholder named it.
         await _client.SendAsync(EnginePacket.CreateMessagePacket(packet.Serialize()), cancellationToken)

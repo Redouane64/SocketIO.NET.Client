@@ -1,3 +1,5 @@
+using SocketIO.Client.Exceptions;
+
 namespace SocketIO.Client.Tests;
 
 public class IOTests
@@ -11,6 +13,7 @@ public class IOTests
         {
             await io.ConnectAsync();
 
+            Assert.True(io.Connected);
             Assert.Equal("40", Assert.Single(server.Posts));
         }
     }
@@ -39,6 +42,50 @@ public class IOTests
 
             // The trailing slash is what a Socket.IO server matches on.
             Assert.StartsWith("/socket.io/?EIO=4", server.Requests[0].Uri.PathAndQuery);
+        }
+    }
+
+    [Fact(DisplayName = "A handshake that never completed is not reported as a connection")]
+    async Task ConnectAsync_Should_Throw_When_The_Handshake_Fails()
+    {
+        // Engine.io answers a handshake with an Open packet; anything else is a
+        // protocol error rather than a session.
+        var (io, server) = CreateClient(FakePollingServer.Payload("4nonsense"));
+
+        await using (io)
+        {
+            var exception = await Assert.ThrowsAsync<IOConnectionException>(() => io.ConnectAsync());
+
+            Assert.NotNull(exception.InnerException);
+            Assert.False(io.Connected);
+            Assert.Empty(server.Posts);
+        }
+    }
+
+    [Fact(DisplayName = "A failed attempt does not leave the client thinking it is connected")]
+    async Task ConnectAsync_Should_Handshake_Again_After_A_Failed_Attempt()
+    {
+        var (io, server) = CreateClient(FakePollingServer.Payload("4nonsense"), FakePollingServer.Handshake());
+
+        await using (io)
+        {
+            await Assert.ThrowsAsync<IOConnectionException>(() => io.ConnectAsync());
+
+            await io.ConnectAsync();
+
+            Assert.True(io.Connected);
+            Assert.Equal("40", Assert.Single(server.Posts));
+        }
+    }
+
+    [Fact]
+    async Task SendAsync_Should_Throw_When_Not_Connected()
+    {
+        var (io, _) = CreateClient(FakePollingServer.Handshake());
+
+        await using (io)
+        {
+            await Assert.ThrowsAsync<IOConnectionException>(() => io.SendAsync("Hello!"));
         }
     }
 

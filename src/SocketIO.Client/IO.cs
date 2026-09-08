@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 using EngineIO.Client;
@@ -49,9 +51,47 @@ public sealed class IO : IAsyncDisposable
     /// </remarks>
     private readonly SemaphoreSlim _sendLock = new(1, 1);
 
+    /// <summary>
+    ///     One queue per namespace being listened to, created the first time somebody
+    ///     asks for it.
+    /// </summary>
+    /// <remarks>
+    ///     A single loop drains the Engine.io stream and fans out from it. Letting each
+    ///     listener drain that stream itself would not work: it is one channel, so two
+    ///     listeners would compete for packets and each would see roughly half of them.
+    ///     Creating the queue on demand also means a listener that subscribed before
+    ///     connecting misses nothing.
+    /// </remarks>
+    private readonly ConcurrentDictionary<string, Channel<Packet>> _listeners = new();
+
+    /// <summary>
+    ///     Ends the receive loop when the client is disposed.
+    /// </summary>
+    private readonly CancellationTokenSource _receiveCancellation = new();
+
+    private readonly ILogger<IO>? _logger;
+
+    /// <summary>
+    ///     The loop that turns Engine.io messages into packets, started on connect.
+    /// </summary>
+    private Task? _receiveTask;
+
+    /// <summary>
+    ///     Set once the receive loop has ended, before any queue is completed, so that
+    ///     a listener arriving afterwards can see that it has missed the stream.
+    /// </summary>
+    private volatile bool _receiveEnded;
+
+    /// <summary>
+    ///     Why the receive loop ended, if it ended badly. Written before
+    ///     <see cref="_receiveEnded" />, which publishes it.
+    /// </summary>
+    private Exception? _receiveError;
+
     public IO(string baseAddress, string path = DefaultPath, ILoggerFactory? loggerFactory = null)
     {
         Path = path;
+        _logger = loggerFactory?.CreateLogger<IO>();
 
         _client = new Engine(Configure(baseAddress, path), loggerFactory);
     }
@@ -64,6 +104,7 @@ public sealed class IO : IAsyncDisposable
         ILoggerFactory? loggerFactory = null)
     {
         Path = path;
+        _logger = loggerFactory?.CreateLogger<IO>();
 
         _client = new Engine(Configure(baseAddress, path), httpClient, loggerFactory: loggerFactory);
     }
@@ -91,7 +132,18 @@ public sealed class IO : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Stop receiving before the engine goes away, so the loop unwinds on its own
+        // token rather than on whatever the teardown happens to throw at it.
+        await _receiveCancellation.CancelAsync().ConfigureAwait(false);
+
+        if (_receiveTask is not null)
+        {
+            await _receiveTask.ConfigureAwait(false);
+        }
+
         await _client.DisposeAsync().ConfigureAwait(false);
+
+        _receiveCancellation.Dispose();
         _connectLock.Dispose();
         _sendLock.Dispose();
     }
@@ -123,6 +175,13 @@ public sealed class IO : IAsyncDisposable
                     throw new IOConnectionException(
                         "The Engine.io connection could not be established.", _client.ConnectionError);
                 }
+            }
+
+            // Restarted after a reconnection: the previous loop ended with the
+            // connection that fed it.
+            if (_receiveTask is null or { IsCompleted: true })
+            {
+                _receiveTask = Task.Run(ReceiveAsync, CancellationToken.None);
             }
         }
         finally
@@ -156,11 +215,97 @@ public sealed class IO : IAsyncDisposable
     public IAsyncEnumerable<Packet> ListenAsync(
         string? @namespace = default, CancellationToken cancellationToken = default)
     {
-        // TODO: decoding a Socket.IO packet from the Engine.io message stream, holding
-        // a binary header back until its attachments have arrived, and routing the
-        // result to the listener of the namespace it names.
-        throw new NotImplementedException(
-            "Receiving requires the Socket.IO packet parser, which is not implemented yet.");
+        var queue = _listeners.GetOrAdd(
+            PacketBuilder.NormalizeNamespace(@namespace), _ => Channel.CreateUnbounded<Packet>());
+
+        // The stream may already have ended — the client disposed, the connection
+        // gone. A queue created after that is one nothing will ever complete, so its
+        // listener would wait for a packet that cannot arrive.
+        if (_receiveEnded)
+        {
+            queue.Writer.TryComplete(_receiveError);
+        }
+
+        return queue.Reader.ReadAllAsync(cancellationToken);
+    }
+
+    /// <summary>
+    ///     Drain the Engine.io message stream, decode it, and hand each packet to the
+    ///     namespace that is listening for it.
+    /// </summary>
+    private async Task ReceiveAsync()
+    {
+        var decoder = new Decoder();
+
+        try
+        {
+            await foreach (var message in _client.ListenAsync(_receiveCancellation.Token).ConfigureAwait(false))
+            {
+                var packet = decoder.Add(message);
+
+                if (packet is not null)
+                {
+                    Route(packet);
+                }
+            }
+
+            EndListeners(null);
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down through DisposeAsync is not a failure.
+            EndListeners(null);
+        }
+        catch (Exception exception)
+        {
+            _logger?.LogError(exception, "The receive loop ended.");
+            EndListeners(exception);
+        }
+    }
+
+    /// <summary>
+    ///     Split protocol concerns from consumer concerns, the way
+    ///     <c>Engine.PollAsync</c> does for the heartbeat.
+    /// </summary>
+    private void Route(Packet packet)
+    {
+        // TODO: Connect carries the namespace's own sid, which is what _namespaces is
+        // waiting for; Disconnect ends it, and ConnectError has to reach whoever asked
+        // to join rather than being dropped here.
+        if (packet.Type is PacketType.Connect or PacketType.Disconnect or PacketType.ConnectError)
+        {
+            _logger?.LogDebug("Namespace {Namespace} sent {Type}, which is not routed yet.",
+                packet.Namespace, packet.Type);
+            return;
+        }
+
+        if (_listeners.TryGetValue(packet.Namespace, out var queue))
+        {
+            // The channel is unbounded, so this never fails or blocks.
+            queue.Writer.TryWrite(packet);
+            return;
+        }
+
+        // Buffering for a namespace nobody listens to would grow without limit.
+        _logger?.LogDebug("Dropped a {Type} packet for {Namespace}, which has no listener.",
+            packet.Type, packet.Namespace);
+    }
+
+    /// <summary>
+    ///     End every listener's enumeration, with the reason if there was one.
+    /// </summary>
+    private void EndListeners(Exception? exception)
+    {
+        // Published before anything is completed, so a listener subscribing alongside
+        // this either is completed by the loop below or completes itself. Both may
+        // happen; completing a queue twice is harmless.
+        _receiveError = exception;
+        _receiveEnded = true;
+
+        foreach (var queue in _listeners.Values)
+        {
+            queue.Writer.TryComplete(exception);
+        }
     }
 
     /// <summary>

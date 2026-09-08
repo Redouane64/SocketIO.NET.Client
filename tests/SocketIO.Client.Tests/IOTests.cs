@@ -1,4 +1,5 @@
 using SocketIO.Client.Exceptions;
+using SocketIO.Client.Packets;
 
 namespace SocketIO.Client.Tests;
 
@@ -148,6 +149,37 @@ public class IOTests
                 Assert.StartsWith("b", posts[(i * 2) + 1]);
             }
         }
+    }
+
+    [Fact]
+    void ListenAsync_Should_Return_A_Stream_Rather_Than_Throwing()
+    {
+        var (io, _) = CreateClient(FakePollingServer.Handshake());
+
+        Assert.NotNull(io.ListenAsync());
+        Assert.NotNull(io.ListenAsync("admin"));
+    }
+
+    [Fact(DisplayName = "Disposing the client ends every listener's enumeration")]
+    async Task ListenAsync_Should_End_When_The_Client_Is_Disposed()
+    {
+        var (io, _) = CreateClient(FakePollingServer.Handshake());
+        await io.ConnectAsync();
+
+        var received = new List<Packet>();
+        var listening = Task.Run(async () =>
+        {
+            await foreach (var packet in io.ListenAsync())
+            {
+                received.Add(packet);
+            }
+        });
+
+        await io.DisposeAsync();
+
+        // Without the listeners being completed this would never return.
+        await listening.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Empty(received);
     }
 
     private static (IO Client, FakePollingServer Server) CreateClient(params byte[][] pollResponses)

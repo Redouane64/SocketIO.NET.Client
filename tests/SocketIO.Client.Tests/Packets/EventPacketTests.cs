@@ -13,7 +13,7 @@ class Foo
 public class EventPacketTests
 {
     [Fact]
-    void ShouldCreateEventPacket()
+    void Should_Create_Event_Packet()
     {
         var packet = new Packet(PacketType.Event);
 
@@ -23,7 +23,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldCreateEventPacketWithNamespace()
+    void Should_Create_Event_Packet_With_Namespace()
     {
         var @namespace = "test";
 
@@ -37,7 +37,7 @@ public class EventPacketTests
     [Theory(DisplayName = "A namespace encodes the same however it was spelled")]
     [InlineData("test")]
     [InlineData("/test")]
-    void ShouldNormalizeNamespace(string @namespace)
+    void Should_Normalize_Namespace(string @namespace)
     {
         var packet = new Packet(PacketType.Event, @namespace);
         packet.AddItem("Hello!");
@@ -47,7 +47,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldCreateEventPacketWithEventName()
+    void Should_Create_Event_Packet_With_Event_Name()
     {
         var eventName = "test";
 
@@ -59,7 +59,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldCreateEventPacketWithAckId()
+    void Should_Create_Ack_Packet_With_Ack_Id()
     {
         var ackId = 42;
 
@@ -70,7 +70,7 @@ public class EventPacketTests
     }
 
     [Fact(DisplayName = "An event can request an acknowledgement")]
-    void ShouldCreateEventPacketRequestingAnAcknowledgement()
+    void Should_Request_An_Acknowledgement_On_An_Event()
     {
         var ackId = 7;
 
@@ -82,13 +82,13 @@ public class EventPacketTests
     }
 
     [Fact(DisplayName = "An acknowledgement does not carry an event name")]
-    void ShouldRejectAnEventNameOnAnAcknowledgement()
+    void Should_Reject_An_Event_Name_On_An_Acknowledgement()
     {
         Assert.Throws<ArgumentException>(() => new Packet(PacketType.Ack, null, "test"));
     }
 
     [Fact]
-    void ShouldSerializePlainTextEventPacket()
+    void Should_Serialize_Plaintext_Event_Packet()
     {
         var packet = new Packet(PacketType.Event);
         packet.AddItem("Hello!");
@@ -99,7 +99,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldThrowWhenAddingInvalidPayloadPacket()
+    void Should_Reject_Binary_On_A_Plaintext_Event()
     {
         var packet = new Packet(PacketType.Event);
         var invalidPayload = new ReadOnlyMemory<byte>(new byte[] { 1, 2, 3 });
@@ -108,7 +108,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldSerializePlainTextEventWithNamespace()
+    void Should_Serialize_Plaintext_Event_With_Namespace()
     {
         var @namespace = "test";
         var expectedEncodedPacket = $"""2/{@namespace},["message","Hello!"]""";
@@ -120,7 +120,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldSerializePlainTextEventWithEventName()
+    void Should_Serialize_Plaintext_Event_With_Event_Name()
     {
         var eventName = "test";
         var expectedEncodedPacket = $$"""2["{{eventName}}","Hello!"]""";
@@ -132,7 +132,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldSerializePlainTextWithAckIdPacket()
+    void Should_Serialize_Plaintext_Ack_Packet()
     {
         var ackId = 42;
 
@@ -147,7 +147,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldSerializeJsonEventPacket()
+    void Should_Serialize_Json_Event_Packet()
     {
         var packet = new Packet(PacketType.Event);
         packet.AddItem(new Foo { Value = "bar" });
@@ -158,7 +158,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldSerializeJsonEventPacketWithNamespace()
+    void Should_Serialize_Json_Event_With_Namespace()
     {
         var @namespace = "test";
         var expectedEncodedPacket = $$"""2/{{@namespace}},["message",{"Value":"bar"}]""";
@@ -170,7 +170,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldSerializeJsonEventWithEventName()
+    void Should_Serialize_Json_Event_With_Event_Name()
     {
         var eventName = "test";
         var expectedEncodedPacket = $$"""2["{{eventName}}",{"Value":"bar"}]""";
@@ -182,7 +182,7 @@ public class EventPacketTests
     }
 
     [Fact]
-    void ShouldSerializeJsonEventWithAckIdPacket()
+    void Should_Serialize_Json_Ack_Packet()
     {
         var ackId = 42;
         var expectedEncodedPacket = $$"""3{{ackId}}[{"Value":"bar"}]""";
@@ -194,7 +194,7 @@ public class EventPacketTests
     }
 
     [Fact(DisplayName = "The same packet encodes identically every time it is sent")]
-    void ShouldSerializeTheSamePacketRepeatedly()
+    void Should_Serialize_The_Same_Packet_Repeatedly()
     {
         var packet = new Packet(PacketType.Event);
         packet.AddItem("Hello!");

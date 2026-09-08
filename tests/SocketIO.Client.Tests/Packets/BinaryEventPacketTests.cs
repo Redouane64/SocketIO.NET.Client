@@ -7,7 +7,7 @@ namespace SocketIO.Client.Tests.Packets;
 public class BinaryEventPacketTests
 {
     [Fact]
-    void ShouldCreateBinaryEventPacket()
+    void Should_Create_Binary_Event_Packet()
     {
         var packet = new Packet(PacketType.BinaryEvent);
         packet.AddItem(new ReadOnlyMemory<byte>([1, 2, 3]));
@@ -17,7 +17,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact]
-    public void ShouldCreateBinaryPacketWithNamespace()
+    void Should_Create_Binary_Packet_With_Namespace()
     {
         var @namespace = "test";
 
@@ -27,7 +27,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact]
-    public void ShouldCreateBinaryPacketWithEventName()
+    void Should_Create_Binary_Packet_With_Event_Name()
     {
         var eventName = "test";
 
@@ -37,7 +37,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact]
-    public void ShouldCreateBinaryPacketWithAckId()
+    void Should_Create_Binary_Packet_With_Ack_Id()
     {
         var ackId = 42;
 
@@ -47,7 +47,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact]
-    public void ShouldSerializeBinaryEventPacket()
+    void Should_Serialize_Binary_Event_Packet()
     {
         var packet = new Packet(PacketType.BinaryEvent);
         packet.AddItem(new ReadOnlyMemory<byte>([1, 2, 3]));
@@ -58,7 +58,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact]
-    public void ShouldSerializeBinaryPacketWithNamespace()
+    void Should_Serialize_Binary_Packet_With_Namespace()
     {
         var @namespace = "test";
         var expectedEncodedPacket = $$"""51-/{{@namespace}},["message",{"_placeholder":true,"num":0}]""";
@@ -70,7 +70,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact]
-    public void ShouldSerializeBinaryPacketWithEventName()
+    void Should_Serialize_Binary_Packet_With_Event_Name()
     {
         var eventName = "test";
         var expectedEncodedPacket = $$"""51-["{{eventName}}",{"_placeholder":true,"num":0}]""";
@@ -82,7 +82,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact]
-    public void ShouldSerializeBinaryPacketWithAckId()
+    void Should_Serialize_Binary_Packet_With_Ack_Id()
     {
         var ackId = 42;
 
@@ -96,7 +96,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact(DisplayName = "Attachments are numbered in the order they were added")]
-    public void ShouldNumberAttachmentsInOrder()
+    void Should_Number_Attachments_In_Order()
     {
         var first = new ReadOnlyMemory<byte>([1, 2, 3]);
         var second = new ReadOnlyMemory<byte>([4, 5, 6]);
@@ -112,7 +112,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact(DisplayName = "Binary and text arguments can be mixed in one payload")]
-    public void ShouldMixTextAndBinaryArguments()
+    void Should_Mix_Text_And_Binary_Arguments()
     {
         var expectedEncodedPacket = """51-["message","Hello!",{"_placeholder":true,"num":0}]""";
 
@@ -124,7 +124,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact(DisplayName = "A byte array is treated as binary, not as a Json value")]
-    public void ShouldTreatAByteArrayAsBinary()
+    void Should_Treat_A_Byte_Array_As_Binary()
     {
         byte[] attachment = [1, 2, 3];
 
@@ -137,7 +137,7 @@ public class BinaryEventPacketTests
     }
 
     [Fact(DisplayName = "The attachments are kept out of the encoded header")]
-    public void ShouldKeepAttachmentsOutOfTheHeader()
+    void Should_Keep_Attachments_Out_Of_The_Header()
     {
         var attachment = new ReadOnlyMemory<byte>([1, 2, 3]);
 

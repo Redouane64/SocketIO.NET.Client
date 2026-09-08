@@ -7,7 +7,7 @@ namespace SocketIO.Client.Tests.Packets;
 public class ConnectPacketTests
 {
     [Fact]
-    void ShouldCreateConnectPacket()
+    void Should_Create_Connect_Packet()
     {
         var packet = Packet.ConnectPacket;
 
@@ -16,7 +16,7 @@ public class ConnectPacketTests
     }
 
     [Fact]
-    void ShouldCreateConnectPacketWithNamespace()
+    void Should_Create_Connect_Packet_With_Namespace()
     {
         var @namespace = "test";
 
@@ -27,7 +27,7 @@ public class ConnectPacketTests
     }
 
     [Fact]
-    void ShouldSerializeConnectPacket()
+    void Should_Serialize_Connect_Packet()
     {
         var connectPacket = Packet.ConnectPacket;
 
@@ -38,7 +38,7 @@ public class ConnectPacketTests
     }
 
     [Fact]
-    void ShouldSerializeConnectPacketWithNamespace()
+    void Should_Serialize_Connect_Packet_With_Namespace()
     {
         var @namespace = "test";
         var connectPacket = new Packet(PacketType.Connect, @namespace);
@@ -50,7 +50,7 @@ public class ConnectPacketTests
     }
 
     [Fact]
-    void ShouldThrowExceptionWhenAddingItemToConnectPacket()
+    void Should_Reject_A_Payload_On_A_Connect_Packet()
     {
         var packet = Packet.ConnectPacket;
 
@@ -58,7 +58,7 @@ public class ConnectPacketTests
     }
 
     [Fact(DisplayName = "The shared Connect packet can be serialized more than once")]
-    void ShouldSerializeSharedConnectPacketRepeatedly()
+    void Should_Serialize_The_Shared_Connect_Packet_Repeatedly()
     {
         var first = Encoding.UTF8.GetString(Packet.ConnectPacket.Serialize().Span);
         var second = Encoding.UTF8.GetString(Packet.ConnectPacket.Serialize().Span);

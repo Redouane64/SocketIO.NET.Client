@@ -7,7 +7,7 @@ namespace SocketIO.Client.Tests.Packets;
 public class DisconnectPacketTests
 {
     [Fact]
-    void ShouldCreateDisconnectPacket()
+    void Should_Create_Disconnect_Packet()
     {
         var packet = Packet.DisconnectPacket;
 
@@ -16,7 +16,7 @@ public class DisconnectPacketTests
     }
 
     [Fact]
-    void ShouldCreateDisconnectPacketWithNamespace()
+    void Should_Create_Disconnect_Packet_With_Namespace()
     {
         var @namespace = "test";
 
@@ -27,7 +27,7 @@ public class DisconnectPacketTests
     }
 
     [Fact]
-    void ShouldSerializeDisconnectPacket()
+    void Should_Serialize_Disconnect_Packet()
     {
         var packet = Packet.DisconnectPacket;
 
@@ -38,7 +38,7 @@ public class DisconnectPacketTests
     }
 
     [Fact]
-    void ShouldSerializeDisconnectPacketWithNamespace()
+    void Should_Serialize_Disconnect_Packet_With_Namespace()
     {
         var @namespace = "test";
         var packet = new Packet(PacketType.Disconnect, @namespace);
@@ -50,7 +50,7 @@ public class DisconnectPacketTests
     }
 
     [Fact]
-    void ShouldThrowExceptionWhenAddingItemToDisconnectPacket()
+    void Should_Reject_A_Payload_On_A_Disconnect_Packet()
     {
         var packet = Packet.DisconnectPacket;
 
